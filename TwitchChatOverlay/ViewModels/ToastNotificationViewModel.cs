@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Windows.Media;
 using Prism.Mvvm;
 using TwitchChatOverlay.Models;
@@ -11,6 +12,9 @@ namespace TwitchChatOverlay.ViewModels
         public string DisplayText { get; }
         public string SubText { get; }
         public bool HasSubText { get; }
+        public IReadOnlyList<object> Fragments { get; }
+        public bool HasFragments { get; }
+        public bool NoFragments { get; }
         public SolidColorBrush UserColorBrush { get; }
         public SolidColorBrush ThemeColorBrush { get; }
 
@@ -21,6 +25,9 @@ namespace TwitchChatOverlay.ViewModels
             DisplayText = notification.DisplayText;
             SubText = notification.SubText;
             HasSubText = !string.IsNullOrEmpty(notification.SubText);
+            Fragments = notification.Fragments?.Count > 0 ? notification.Fragments : null;
+            HasFragments = Fragments?.Count > 0 == true;
+            NoFragments = !HasFragments;
             ThemeColorBrush = new SolidColorBrush(notification.ThemeColor);
 
             if (!string.IsNullOrEmpty(notification.UserColor) &&

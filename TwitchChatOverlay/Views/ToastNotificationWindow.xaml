@@ -1,6 +1,8 @@
 <Window x:Class="TwitchChatOverlay.Views.ToastNotificationWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:TwitchChatOverlay.Models"
+        xmlns:gif="https://github.com/XamlAnimatedGif/XamlAnimatedGif"
         Title="ToastNotification" 
         WindowStyle="None"
         AllowsTransparency="True"
@@ -10,6 +12,33 @@
         Width="380"
         SizeToContent="Height"
         Opacity="0">
+    <Window.Resources>
+        <!-- テキストフラグメント -->
+        <DataTemplate DataType="{x:Type models:TextFragment}">
+            <TextBlock Text="{Binding Text}"
+                       Foreground="#FFFFFF"
+                       FontSize="12"
+                       VerticalAlignment="Center"
+                       TextWrapping="Wrap"/>
+        </DataTemplate>
+        <!-- 静止エモート -->
+        <DataTemplate DataType="{x:Type models:StaticEmoteFragment}">
+            <Image Source="{Binding EmoteUrl}"
+                   Width="22" Height="22"
+                   Margin="1,0"
+                   VerticalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality"/>
+        </DataTemplate>
+        <!-- アニメーションエモート -->
+        <DataTemplate DataType="{x:Type models:AnimatedEmoteFragment}">
+            <Image gif:AnimationBehavior.SourceUri="{Binding EmoteUrl}"
+                   gif:AnimationBehavior.RepeatBehavior="Forever"
+                   Width="22" Height="22"
+                   Margin="1,0"
+                   VerticalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality"/>
+        </DataTemplate>
+    </Window.Resources>
     <Window.Triggers>
         <EventTrigger RoutedEvent="Window.Loaded">
             <BeginStoryboard>
@@ -53,13 +82,25 @@
                                MaxWidth="260"/>
                 </StackPanel>
 
-                <!-- メインテキスト -->
+                <!-- メインテキスト (エモート付きチャット) -->
+                <ItemsControl ItemsSource="{Binding Fragments}"
+                              Margin="0,4,0,0"
+                              Visibility="{Binding HasFragments, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+                <!-- メインテキスト (プレーンテキスト) -->
                 <TextBlock Text="{Binding DisplayText}"
                            Foreground="#FFFFFF"
                            FontSize="12"
                            TextWrapping="Wrap"
                            Margin="0,4,0,0"
-                           MaxHeight="60"/>
+                           MaxHeight="60"
+                           Visibility="{Binding NoFragments, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- サブテキスト（オプション） -->
                 <TextBlock Text="{Binding SubText}"

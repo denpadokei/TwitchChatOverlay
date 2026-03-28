@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
@@ -153,11 +155,40 @@ namespace TwitchChatOverlay.Services
 
         private static OverlayNotification BuildChatNotification(JToken evt)
         {
+            var fragments = new List<object>();
+            if (evt["message"]?["fragments"] is JArray fragArray)
+            {
+                foreach (var frag in fragArray)
+                {
+                    var fragType = frag["type"]?.ToString();
+                    var text = frag["text"]?.ToString() ?? "";
+                    if (fragType == "emote")
+                    {
+                        var emoteId = frag["emote"]?["id"]?.ToString() ?? "";
+                        var formats = frag["emote"]?["format"] as JArray;
+                        bool isAnimated = formats?.Any(f => f.ToString() == "animated") ?? false;
+                        EmoteFragment emote = isAnimated
+                            ? new AnimatedEmoteFragment { Text = text, EmoteId = emoteId }
+                            : new StaticEmoteFragment { Text = text, EmoteId = emoteId };
+                        fragments.Add(emote);
+                    }
+                    else if (!string.IsNullOrEmpty(text))
+                    {
+                        fragments.Add(new TextFragment { Text = text });
+                    }
+                }
+            }
+
+            var msgText = evt["message"]?["text"]?.ToString() ?? "";
+            if (fragments.Count == 0 && !string.IsNullOrEmpty(msgText))
+                fragments.Add(new TextFragment { Text = msgText });
+
             return new OverlayNotification
             {
                 Type = NotificationType.Chat,
                 Username = evt["chatter_user_name"]?.ToString() ?? evt["chatter_user_login"]?.ToString() ?? "",
-                DisplayText = evt["message"]?["text"]?.ToString() ?? "",
+                DisplayText = msgText,
+                Fragments = fragments,
                 UserColor = evt["color"]?.ToString() ?? "#FFFFFF"
             };
         }

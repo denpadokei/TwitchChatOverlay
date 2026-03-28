@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Windows.Media;
 
 namespace TwitchChatOverlay.Models
@@ -24,6 +25,7 @@ namespace TwitchChatOverlay.Models
         public string SubText { get; set; }
         public string UserColor { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.Now;
+        public List<object> Fragments { get; set; } = new();
 
         public string TypeIcon => Type switch
         {
