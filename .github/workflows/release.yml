@@ -24,6 +24,10 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore TwitchChatOverlay/TwitchChatOverlay.csproj
 
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=$('${{ github.ref_name }}' -replace '^v', '')" >> $env:GITHUB_OUTPUT
+
       - name: Publish (self-contained, single file)
         run: >
           dotnet publish TwitchChatOverlay/TwitchChatOverlay.csproj
@@ -33,6 +37,7 @@ jobs:
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
+          -p:Version=${{ steps.version.outputs.VERSION }}
           --output ./publish
 
       - name: Zip artifacts
