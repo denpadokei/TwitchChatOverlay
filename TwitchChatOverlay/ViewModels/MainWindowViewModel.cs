@@ -1,10 +1,12 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Prism.Commands;
 using Prism.Mvvm;
 using TwitchChatOverlay.Services;
+using WinForms = System.Windows.Forms;
 
 namespace TwitchChatOverlay.ViewModels
 {
@@ -31,6 +33,10 @@ namespace TwitchChatOverlay.ViewModels
         private int _toastDurationSeconds = 5;
         private int _toastMaxCount = 5;
         private int _toastPositionIndex = 0;
+        private int _toastMonitorIndex = 0;
+        private double _toastFontSize = 12;
+
+        public ObservableCollection<string> MonitorList { get; } = new();
 
         public ObservableCollection<string> RecentChannels { get; } = new();
 
@@ -168,6 +174,18 @@ namespace TwitchChatOverlay.ViewModels
             set => SetProperty(ref _toastPositionIndex, value);
         }
 
+        public int ToastMonitorIndex
+        {
+            get => _toastMonitorIndex;
+            set => SetProperty(ref _toastMonitorIndex, value);
+        }
+
+        public double ToastFontSize
+        {
+            get => _toastFontSize;
+            set => SetProperty(ref _toastFontSize, value);
+        }
+
         public ICommand ConnectCommand { get; }
         public ICommand DisconnectCommand { get; }
         public ICommand AuthorizeOAuthCommand { get; }
@@ -192,6 +210,15 @@ namespace TwitchChatOverlay.ViewModels
             SelectRecentChannelCommand = new DelegateCommand<string>(ch => ChannelName = ch);
 
             _toastService.Initialize(_eventSubService);
+
+            // モニター一覧を構築
+            var screens = WinForms.Screen.AllScreens;
+            for (int i = 0; i < screens.Length; i++)
+            {
+                var s = screens[i];
+                string label = $"モニター {i + 1}{(s.Primary ? " (プライマリ)" : "")} {s.Bounds.Width}x{s.Bounds.Height}";
+                MonitorList.Add(label);
+            }
 
             LoadSettings();
             _ = ValidateSavedTokenAsync();
@@ -400,6 +427,8 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ToastDurationSeconds = ToastDurationSeconds;
                 settings.ToastMaxCount = ToastMaxCount;
                 settings.ToastPosition = (Services.ToastPosition)ToastPositionIndex;
+                settings.ToastMonitorIndex = ToastMonitorIndex;
+                settings.ToastFontSize = ToastFontSize;
 
                 _settingsService.SaveSettings(settings);
                 StatusMessage = "✅ 設定を保存しました";
@@ -434,6 +463,9 @@ namespace TwitchChatOverlay.ViewModels
                 ToastDurationSeconds = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds : 5;
                 ToastMaxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
                 ToastPositionIndex = (int)settings.ToastPosition;
+                ToastMonitorIndex = (settings.ToastMonitorIndex >= 0 && settings.ToastMonitorIndex < WinForms.Screen.AllScreens.Length)
+                    ? settings.ToastMonitorIndex : 0;
+                ToastFontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
             }
             catch (Exception ex)
             {

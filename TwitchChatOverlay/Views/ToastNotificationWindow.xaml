@@ -17,7 +17,7 @@
         <DataTemplate DataType="{x:Type models:TextFragment}">
             <TextBlock Text="{Binding Text}"
                        Foreground="#FFFFFF"
-                       FontSize="12"
+                       FontSize="{Binding DataContext.FontSize, RelativeSource={RelativeSource AncestorType=Window}}"
                        VerticalAlignment="Center"
                        TextWrapping="Wrap"/>
         </DataTemplate>
@@ -70,12 +70,12 @@
                 <!-- タイプアイコン + ユーザー名 -->
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding TypeIcon}"
-                               FontSize="14"
+                               FontSize="{Binding UsernameFontSize}"
                                VerticalAlignment="Center"
                                Margin="0,0,6,0"/>
                     <TextBlock Text="{Binding Username}"
                                FontWeight="Bold"
-                               FontSize="13"
+                               FontSize="{Binding UsernameFontSize}"
                                Foreground="{Binding UserColorBrush}"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"
@@ -96,7 +96,7 @@
                 <!-- メインテキスト (プレーンテキスト) -->
                 <TextBlock Text="{Binding DisplayText}"
                            Foreground="#FFFFFF"
-                           FontSize="12"
+                           FontSize="{Binding FontSize}"
                            TextWrapping="Wrap"
                            Margin="0,4,0,0"
                            MaxHeight="60"
@@ -105,7 +105,7 @@
                 <!-- サブテキスト（オプション） -->
                 <TextBlock Text="{Binding SubText}"
                            Foreground="#AAAAAA"
-                           FontSize="11"
+                           FontSize="{Binding SubTextFontSize}"
                            TextWrapping="Wrap"
                            Margin="0,3,0,0"
                            Visibility="{Binding HasSubText, Converter={StaticResource BooleanToVisibilityConverter}}"/>

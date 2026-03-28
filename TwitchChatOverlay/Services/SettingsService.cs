@@ -23,6 +23,8 @@ namespace TwitchChatOverlay.Services
         public int ToastDurationSeconds { get; set; } = 5;
         public int ToastMaxCount { get; set; } = 5;
         public ToastPosition ToastPosition { get; set; } = ToastPosition.TopRight;
+        public int ToastMonitorIndex { get; set; } = 0;
+        public double ToastFontSize { get; set; } = 12;
 
         // 通知表示設定 (初期値: すべて表示)
         public bool ShowReward { get; set; } = true;

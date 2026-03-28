@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Windows.Media;
 using Prism.Mvvm;
@@ -15,10 +16,13 @@ namespace TwitchChatOverlay.ViewModels
         public IReadOnlyList<object> Fragments { get; }
         public bool HasFragments { get; }
         public bool NoFragments { get; }
+        public double FontSize { get; }
+        public double UsernameFontSize { get; }
+        public double SubTextFontSize { get; }
         public SolidColorBrush UserColorBrush { get; }
         public SolidColorBrush ThemeColorBrush { get; }
 
-        public ToastNotificationViewModel(OverlayNotification notification)
+        public ToastNotificationViewModel(OverlayNotification notification, double fontSize = 12)
         {
             TypeIcon = notification.TypeIcon;
             Username = notification.Username;
@@ -28,6 +32,9 @@ namespace TwitchChatOverlay.ViewModels
             Fragments = notification.Fragments?.Count > 0 ? notification.Fragments : null;
             HasFragments = Fragments?.Count > 0 == true;
             NoFragments = !HasFragments;
+            FontSize = fontSize;
+            UsernameFontSize = fontSize + 1;
+            SubTextFontSize = Math.Max(8, fontSize - 1);
             ThemeColorBrush = new SolidColorBrush(notification.ThemeColor);
 
             if (!string.IsNullOrEmpty(notification.UserColor) &&

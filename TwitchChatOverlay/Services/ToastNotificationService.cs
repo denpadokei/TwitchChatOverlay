@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Windows;
 using TwitchChatOverlay.Models;
 using TwitchChatOverlay.Views;
+using WinForms = System.Windows.Forms;
 
 namespace TwitchChatOverlay.Services
 {
@@ -16,15 +17,32 @@ namespace TwitchChatOverlay.Services
         private const double ToastWidth = 380;
         private const double ScreenMargin = 20;
 
-        private (double left, double top) GetToastPosition(ToastPosition position, int index)
+        private (double left, double top) GetToastPosition(ToastPosition position, int index, int monitorIndex)
         {
+            var screens = WinForms.Screen.AllScreens;
+            var screen = (monitorIndex >= 0 && monitorIndex < screens.Length)
+                ? screens[monitorIndex]
+                : WinForms.Screen.PrimaryScreen;
+
+            // WPF の論理ピクセルへ変換 (DPI スケール考慮)
+            var source = System.Windows.PresentationSource.FromVisual(
+                System.Windows.Application.Current.MainWindow);
+            double dpiX = source?.CompositionTarget?.TransformFromDevice.M11 ?? 1.0;
+            double dpiY = source?.CompositionTarget?.TransformFromDevice.M22 ?? 1.0;
+
+            double screenLeft   = screen.WorkingArea.Left   * dpiX;
+            double screenTop    = screen.WorkingArea.Top    * dpiY;
+            double screenRight  = screen.WorkingArea.Right  * dpiX;
+            double screenBottom = screen.WorkingArea.Bottom * dpiY;
+            double screenWidth  = screen.WorkingArea.Width  * dpiX;
+
             double left = (position == ToastPosition.TopLeft || position == ToastPosition.BottomLeft)
-                ? ScreenMargin
-                : SystemParameters.PrimaryScreenWidth - ToastWidth - ScreenMargin;
+                ? screenLeft + ScreenMargin
+                : screenRight - ToastWidth - ScreenMargin;
 
             double top = (position == ToastPosition.TopLeft || position == ToastPosition.TopRight)
-                ? ScreenMargin + index * (ToastHeight + ToastMargin)
-                : SystemParameters.PrimaryScreenHeight - ScreenMargin - (index + 1) * (ToastHeight + ToastMargin);
+                ? screenTop + ScreenMargin + index * (ToastHeight + ToastMargin)
+                : screenBottom - ScreenMargin - (index + 1) * (ToastHeight + ToastMargin);
 
             return (left, top);
         }
@@ -74,8 +92,9 @@ namespace TwitchChatOverlay.Services
             if (_activeToasts.Count >= maxCount)
                 return;
 
-            var (left, top) = GetToastPosition(settings.ToastPosition, _activeToasts.Count);
-            var toast = new ToastNotificationWindow(notification, left, top);
+            var (left, top) = GetToastPosition(settings.ToastPosition, _activeToasts.Count, settings.ToastMonitorIndex);
+            double fontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
+            var toast = new ToastNotificationWindow(notification, left, top, fontSize);
 
             _activeToasts.Add(toast);
             toast.Closed += (s, e) =>
@@ -92,7 +111,7 @@ namespace TwitchChatOverlay.Services
             var settings = _settingsService.LoadSettings();
             for (int i = 0; i < _activeToasts.Count; i++)
             {
-                var (left, top) = GetToastPosition(settings.ToastPosition, i);
+                var (left, top) = GetToastPosition(settings.ToastPosition, i, settings.ToastMonitorIndex);
                 _activeToasts[i].Left = left;
                 _activeToasts[i].Top = top;
             }

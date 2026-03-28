@@ -201,6 +201,41 @@
                     </ComboBox>
                 </Grid>
 
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="モニター"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                    <ComboBox Grid.Column="1"
+                              ItemsSource="{Binding MonitorList}"
+                              SelectedIndex="{Binding ToastMonitorIndex}"
+                              Height="28" FontSize="12"/>
+                </Grid>
+
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="32"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="文字サイズ"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                    <Slider Grid.Column="1"
+                            Minimum="8" Maximum="24"
+                            Value="{Binding ToastFontSize}"
+                            VerticalAlignment="Center"
+                            IsSnapToTickEnabled="True" TickFrequency="1"/>
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding ToastFontSize, StringFormat={}{0}pt}"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextSecondaryBrush}"
+                               FontSize="11" Margin="4,0,0,0"/>
+                </Grid>
+
                 <Separator Margin="0,14,0,12" Background="{StaticResource BorderBrush}"/>
 
                 <Button Content="💾 設定を保存"

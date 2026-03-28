@@ -21,10 +21,10 @@ namespace TwitchChatOverlay.Views
         [DllImport("user32.dll")]
         private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
-        public ToastNotificationWindow(OverlayNotification notification, double left, double top)
+        public ToastNotificationWindow(OverlayNotification notification, double left, double top, double fontSize)
         {
             InitializeComponent();
-            DataContext = new ViewModels.ToastNotificationViewModel(notification);
+            DataContext = new ViewModels.ToastNotificationViewModel(notification, fontSize);
 
             Left = left;
             Top = top;
