@@ -1,0 +1,70 @@
+name: 🐛 バグ報告
+description: 不具合や予期しない動作を報告する
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        バグ報告ありがとうございます。できるだけ詳しく記入してください。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 不具合の内容
+      description: 何が起きているか説明してください
+      placeholder: 例）接続ボタンを押すとアプリがクラッシュした
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 不具合を再現するための操作手順
+      placeholder: |
+        1. アプリを起動する
+        2. チャンネル名を入力する
+        3. 接続ボタンを押す
+        4. クラッシュした
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作
+      placeholder: 例）エラーが出ずに接続できるはずだった
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の動作
+      placeholder: 例）「接続エラー: ...」というメッセージが表示された
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: アプリバージョン
+      placeholder: 例）v1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Windows 11
+        - Windows 10
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: エラーメッセージ / ログ（あれば）
+      render: text
