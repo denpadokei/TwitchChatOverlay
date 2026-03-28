@@ -11,6 +11,9 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: read
 
     steps:
       - name: Checkout
@@ -48,5 +51,4 @@ jobs:
         with:
           files: TwitchChatOverlay-${{ github.ref_name }}-win-x64.zip
           generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
