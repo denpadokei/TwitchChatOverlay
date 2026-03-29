@@ -54,6 +54,7 @@ namespace TwitchChatOverlay.ViewModels
         private int _updateProgressPercent;
         private string _latestVersion;
         private string _updateDownloadUrl;
+        private string _updateChecksumUrl;
         private string _updateReleasePageUrl;
 
         public bool IsUpdateAvailable
@@ -564,6 +565,7 @@ namespace TwitchChatOverlay.ViewModels
                 {
                     LatestVersion = result.LatestVersion;
                     _updateDownloadUrl = result.DownloadUrl;
+                    _updateChecksumUrl = result.ChecksumUrl;
                     _updateReleasePageUrl = result.ReleasePageUrl;
                     IsUpdateAvailable = true;
                 }
@@ -589,12 +591,17 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 var progress = new Progress<int>(p => UpdateProgressPercent = p);
-                string filePath = await _updateService.DownloadUpdateAsync(_updateDownloadUrl, progress);
+                string filePath = await _updateService.DownloadUpdateAsync(_updateDownloadUrl, _updateChecksumUrl, progress);
                 _updateService.LaunchInstaller(filePath);
+                // LaunchInstaller が Shutdown を呼ぶため、ここには通常到達しない。
+                // .zip の自己更新バッチ起動後も Shutdown するため同様。
             }
             catch (Exception ex)
             {
                 StatusMessage = $"更新の失敗: {ex.Message}";
+            }
+            finally
+            {
                 IsUpdating = false;
                 UpdateProgressPercent = 0;
             }

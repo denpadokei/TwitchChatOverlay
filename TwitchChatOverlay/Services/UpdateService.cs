@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 
@@ -15,6 +16,7 @@ namespace TwitchChatOverlay.Services
         public bool IsUpdateAvailable { get; init; }
         public string LatestVersion { get; init; }
         public string DownloadUrl { get; init; }
+        public string ChecksumUrl { get; init; }
         public string ReleasePageUrl { get; init; }
     }
 
@@ -58,18 +60,25 @@ namespace TwitchChatOverlay.Services
             if (latestVersion <= currentVersion)
                 return new UpdateCheckResult { IsUpdateAvailable = false };
 
-            // アセットから .exe または .zip を探す
+            // アセットから .exe または .zip、および対応する .sha256 を探す
             string downloadUrl = null;
+            string checksumUrl = null;
             var assets = json["assets"] as JArray;
             if (assets != null)
             {
                 foreach (var asset in assets)
                 {
                     string name = asset["name"]?.Value<string>() ?? "";
-                    if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                        name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    string assetUrl = asset["browser_download_url"]?.Value<string>();
+
+                    if (name.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase))
                     {
-                        downloadUrl = asset["browser_download_url"]?.Value<string>();
+                        checksumUrl = assetUrl;
+                    }
+                    else if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                             name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        downloadUrl = assetUrl;
                         if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                             break; // .exe があれば優先
                     }
@@ -81,18 +90,52 @@ namespace TwitchChatOverlay.Services
                 IsUpdateAvailable = true,
                 LatestVersion = tagName,
                 DownloadUrl = downloadUrl,
+                ChecksumUrl = checksumUrl,
                 ReleasePageUrl = htmlUrl,
             };
         }
 
-        public async Task<string> DownloadUpdateAsync(string url, IProgress<int> progress)
+        // GitHub がリリースアセットに使用するホスト
+        private static readonly string[] TrustedHosts =
         {
+            "github.com",
+            "objects.githubusercontent.com",
+        };
+
+        private static void ValidateDownloadUrl(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+                throw new InvalidOperationException("ダウンロード URL が不正です。");
+            if (uri.Scheme != Uri.UriSchemeHttps)
+                throw new InvalidOperationException("HTTPS 以外のダウンロード URL は許可されていません。");
+            bool trusted = false;
+            foreach (var host in TrustedHosts)
+            {
+                if (uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase) ||
+                    uri.Host.EndsWith("." + host, StringComparison.OrdinalIgnoreCase))
+                {
+                    trusted = true;
+                    break;
+                }
+            }
+            if (!trusted)
+                throw new InvalidOperationException($"信頼されていないホストからのダウンロードは許可されていません: {uri.Host}");
+        }
+
+        public async Task<string> DownloadUpdateAsync(string url, string checksumUrl, IProgress<int> progress)
+        {
+            ValidateDownloadUrl(url);
+
             string tempDir = Path.Combine(Path.GetTempPath(), "TwitchChatOverlay");
             Directory.CreateDirectory(tempDir);
 
             string fileName = Path.GetFileName(new Uri(url).AbsolutePath);
             // URLデコード（%20 など）
             fileName = Uri.UnescapeDataString(fileName);
+            // パストラバーサル防止: ファイル名のみを使用
+            fileName = Path.GetFileName(fileName);
+            if (string.IsNullOrWhiteSpace(fileName))
+                throw new InvalidOperationException("ダウンロード先ファイル名を決定できません。");
             string destPath = Path.Combine(tempDir, fileName);
 
             using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
@@ -117,7 +160,44 @@ namespace TwitchChatOverlay.Services
             }
 
             progress?.Report(100);
+
+            // チェックサムファイルがある場合は SHA256 を検証する
+            if (!string.IsNullOrEmpty(checksumUrl))
+                await VerifySha256Async(destPath, checksumUrl);
+
             return destPath;
+        }
+
+        /// <summary>
+        /// 公開されている .sha256 ファイルをダウンロードし、ローカルファイルのハッシュと比較する。
+        /// フォーマット: "&lt;hexhash&gt;  &lt;filename&gt;" (sha256sum 標準形式)
+        /// </summary>
+        private async Task VerifySha256Async(string localFilePath, string checksumUrl)
+        {
+            ValidateDownloadUrl(checksumUrl);
+
+            string checksumText = await _http.GetStringAsync(checksumUrl);
+            // 最初のトークン（空白区切り）がハッシュ値
+            string expectedHash = checksumText.Split(new[] { ' ', '\t', '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries)[0].ToLowerInvariant();
+
+            string actualHash = await ComputeSha256Async(localFilePath);
+
+            if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(localFilePath);
+                throw new InvalidOperationException(
+                    $"SHA256 検証に失敗しました。ファイルが破損しているか改ざんされている可能性があります。\n" +
+                    $"期待値: {expectedHash}\n実際値: {actualHash}");
+            }
+        }
+
+        private static async Task<string> ComputeSha256Async(string filePath)
+        {
+            await using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+                FileShare.Read, bufferSize: 81920, useAsync: true);
+            byte[] hashBytes = await SHA256.HashDataAsync(fs);
+            return Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
 
         public void LaunchInstaller(string filePath)
