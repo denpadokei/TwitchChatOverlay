@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 
 clientsecret.txt
+build/local.props

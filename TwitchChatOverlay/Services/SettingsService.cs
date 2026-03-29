@@ -15,7 +15,7 @@ namespace TwitchChatOverlay.Services
         public string ChannelName { get; set; }
         public string OAuthToken { get; set; }
         public string RefreshToken { get; set; }
-        public string ClientId { get; set; } = "3rrjg8z3rs5ski5hwfubvgjayh0zu4";
+        public string ClientId { get; set; } = BuildSecrets.ClientId;
         public string BroadcasterUserId { get; set; }
         public string UserId { get; set; }
         /// <summary>トークンを取得した日時（UTC）</summary>

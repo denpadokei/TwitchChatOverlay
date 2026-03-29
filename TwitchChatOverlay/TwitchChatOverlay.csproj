@@ -1,4 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- ローカルデバッグ用シークレット（gitignore済み）。存在する場合のみ読み込む -->
+  <Import Project="..\build\local.props" Condition="Exists('..\build\local.props')" />
+
+  <PropertyGroup>
+    <!-- ビルド時にGitHub Actionsから注入されるシークレット。ローカルビルド時は空文字。 -->
+    <TwitchClientId Condition="'$(TwitchClientId)' == ''"></TwitchClientId>
+    <TwitchClientSecret Condition="'$(TwitchClientSecret)' == ''"></TwitchClientSecret>
+  </PropertyGroup>
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -16,4 +24,17 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="XamlAnimatedGif" Version="2.3.1" />
   </ItemGroup>
+
+  <!-- ビルド前にシークレットを含むC#ファイルを自動生成するターゲット -->
+  <Target Name="GenerateBuildSecrets" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_BuildSecretsScript>$(MSBuildThisFileDirectory)..\build\Generate-BuildSecrets.ps1</_BuildSecretsScript>
+      <!-- GetFullPath でトレイリングスラッシュを除去（バックスラッシュがクォートをエスケープするのを防ぐ） -->
+      <_BuildSecretsOut>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)'))</_BuildSecretsOut>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BuildSecretsScript)&quot; -ClientId &quot;$(TwitchClientId)&quot; -ClientSecret &quot;$(TwitchClientSecret)&quot; -OutPath &quot;$(_BuildSecretsOut)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(_BuildSecretsOut)\BuildSecrets.g.cs" />
+    </ItemGroup>
+  </Target>
 </Project>

@@ -428,7 +428,7 @@ namespace TwitchChatOverlay.ViewModels
 
             try
             {
-                var oauthServer = new TwitchOAuthServer(ClientId);
+                var oauthServer = new TwitchOAuthServer(ClientId, BuildSecrets.ClientSecret);
                 var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
                 OAuthToken = newToken.AccessToken;
@@ -475,7 +475,7 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Warning("予期しない切断が発生しました。トークン更新と再接続を試みます");
                 await Task.Delay(2000); // 少し待ってから再接続
 
-                var oauthServer = new TwitchOAuthServer(ClientId);
+                var oauthServer = new TwitchOAuthServer(ClientId, BuildSecrets.ClientSecret);
                 var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
                 OAuthToken = newToken.AccessToken;
@@ -537,7 +537,7 @@ namespace TwitchChatOverlay.ViewModels
                         try
                         {
                             TokenInfo = "🔄 トークンを更新中...";
-                            var oauthServer = new TwitchOAuthServer(ClientId);
+                            var oauthServer = new TwitchOAuthServer(ClientId, BuildSecrets.ClientSecret);
                             var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
                             OAuthToken = newToken.AccessToken;
@@ -636,7 +636,7 @@ namespace TwitchChatOverlay.ViewModels
                 DeviceUserCode = "";
                 StatusMessage = "デバイス認可を開始中...";
 
-                var oauthServer = new TwitchOAuthServer(ClientId);
+                var oauthServer = new TwitchOAuthServer(ClientId, BuildSecrets.ClientSecret);
                 var tokenResponse = await oauthServer.AuthorizeAsync((userCode, verUri) =>
                 {
                     DeviceUserCode = userCode;
