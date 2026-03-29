@@ -1,6 +1,5 @@
 using System;
 using System.Collections.ObjectModel;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -695,7 +694,7 @@ namespace TwitchChatOverlay.ViewModels
                     ? settings.ToastMonitorIndex : 0;
                 ToastFontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
                 ToastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
-                ToastBackgroundOpacity = settings.ToastBackgroundOpacity > 0 ? settings.ToastBackgroundOpacity : 0.8;
+                ToastBackgroundOpacity = settings.ToastBackgroundOpacity >= 0 ? settings.ToastBackgroundOpacity : 0.8;
                 ToastFontFamily = settings.ToastFontFamily ?? "";
                 ToastBackgroundModeIndex = (int)settings.ToastBackgroundMode;
                 ToastCustomBackgroundColor = string.IsNullOrEmpty(settings.ToastCustomBackgroundColor)

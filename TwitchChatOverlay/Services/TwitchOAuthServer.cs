@@ -55,8 +55,27 @@ namespace TwitchChatOverlay.Services
             var json = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
-                throw new Exception($"トークンリフレッシュ失敗: {json}");
+            {
+                var baseMessage = $"トークンリフレッシュ失敗 (StatusCode: {(int)response.StatusCode})";
+                try
+                {
+                    var obj = JObject.Parse(json);
+                    var error = (string?)obj["error"];
+                    var message = (string?)obj["message"];
 
+                    if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(message))
+                    {
+                        var detail = string.Join(": ", new[] { error, message }.Where(s => !string.IsNullOrEmpty(s)));
+                        baseMessage = $"{baseMessage}: {detail}";
+                    }
+                }
+                catch (JsonException)
+                {
+                    // 応答本文がJSONでない場合は、ステータスコードのみを使用する
+                }
+
+                throw new Exception(baseMessage);
+            }
             return JsonConvert.DeserializeObject<DeviceTokenResponse>(json)
                 ?? throw new Exception("リフレッシュレスポンスの解析に失敗しました");
         }
