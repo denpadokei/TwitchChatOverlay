@@ -49,10 +49,42 @@ namespace TwitchChatOverlay.ViewModels
 
         public bool HasRecentChannels => RecentChannels.Count > 0;
 
+        private bool _isUpdateAvailable;
+        private bool _isUpdating;
+        private int _updateProgressPercent;
+        private string _latestVersion;
+        private string _updateDownloadUrl;
+        private string _updateReleasePageUrl;
+
+        public bool IsUpdateAvailable
+        {
+            get => _isUpdateAvailable;
+            set => SetProperty(ref _isUpdateAvailable, value);
+        }
+
+        public bool IsUpdating
+        {
+            get => _isUpdating;
+            set => SetProperty(ref _isUpdating, value);
+        }
+
+        public int UpdateProgressPercent
+        {
+            get => _updateProgressPercent;
+            set => SetProperty(ref _updateProgressPercent, value);
+        }
+
+        public string LatestVersion
+        {
+            get => _latestVersion;
+            set => SetProperty(ref _latestVersion, value);
+        }
+
         private readonly TwitchApiService _apiService;
         private readonly TwitchEventSubService _eventSubService;
         private readonly ToastNotificationService _toastService;
         private readonly SettingsService _settingsService;
+        private readonly UpdateService _updateService;
         private Timer _tokenRefreshTimer;
 
         public string Title
@@ -283,23 +315,34 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand AuthorizeOAuthCommand { get; }
         public ICommand SaveSettingsCommand { get; }
         public ICommand SelectRecentChannelCommand { get; }
+        public ICommand UpdateCommand { get; }
+        public ICommand OpenReleasePageCommand { get; }
 
         public MainWindowViewModel(
             SettingsService settingsService,
             TwitchApiService apiService,
             TwitchEventSubService eventSubService,
-            ToastNotificationService toastService)
+            ToastNotificationService toastService,
+            UpdateService updateService)
         {
             _settingsService = settingsService;
             _apiService = apiService;
             _eventSubService = eventSubService;
             _toastService = toastService;
+            _updateService = updateService;
 
             ConnectCommand = new DelegateCommand(Connect, CanConnect);
             DisconnectCommand = new DelegateCommand(Disconnect, CanDisconnect);
             AuthorizeOAuthCommand = new DelegateCommand(AuthorizeOAuth);
             SaveSettingsCommand = new DelegateCommand(SaveSettings);
             SelectRecentChannelCommand = new DelegateCommand<string>(ch => ChannelName = ch);
+            UpdateCommand = new DelegateCommand(ExecuteUpdate, () => IsUpdateAvailable && !IsUpdating)
+                .ObservesProperty(() => IsUpdateAvailable)
+                .ObservesProperty(() => IsUpdating);
+            OpenReleasePageCommand = new DelegateCommand(
+                () => _updateService.OpenReleasePage(_updateReleasePageUrl),
+                () => !string.IsNullOrEmpty(_updateReleasePageUrl))
+                .ObservesProperty(() => IsUpdateAvailable);
 
             _toastService.Initialize(_eventSubService);
 
@@ -317,6 +360,7 @@ namespace TwitchChatOverlay.ViewModels
 
             LoadSettings();
             _ = ValidateSavedTokenAsync();
+            _ = CheckForUpdateAsync();
         }
 
         private async Task AutoConnectAsync()
@@ -508,6 +552,51 @@ namespace TwitchChatOverlay.ViewModels
             catch
             {
                 // ネットワークエラーなどは無視
+            }
+        }
+
+        private async Task CheckForUpdateAsync()
+        {
+            try
+            {
+                var result = await _updateService.CheckForUpdateAsync();
+                if (result.IsUpdateAvailable)
+                {
+                    LatestVersion = result.LatestVersion;
+                    _updateDownloadUrl = result.DownloadUrl;
+                    _updateReleasePageUrl = result.ReleasePageUrl;
+                    IsUpdateAvailable = true;
+                }
+            }
+            catch
+            {
+                // ネットワークエラーは無視（更新チェックは必須ではない）
+            }
+        }
+
+        private async void ExecuteUpdate()
+        {
+            if (string.IsNullOrEmpty(_updateDownloadUrl))
+            {
+                if (!string.IsNullOrEmpty(_updateReleasePageUrl))
+                    _updateService.OpenReleasePage(_updateReleasePageUrl);
+                return;
+            }
+
+            IsUpdating = true;
+            UpdateProgressPercent = 0;
+
+            try
+            {
+                var progress = new Progress<int>(p => UpdateProgressPercent = p);
+                string filePath = await _updateService.DownloadUpdateAsync(_updateDownloadUrl, progress);
+                _updateService.LaunchInstaller(filePath);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"更新の失敗: {ex.Message}";
+                IsUpdating = false;
+                UpdateProgressPercent = 0;
             }
         }
 
