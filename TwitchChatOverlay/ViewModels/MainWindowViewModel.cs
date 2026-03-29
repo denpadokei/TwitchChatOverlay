@@ -399,12 +399,18 @@ namespace TwitchChatOverlay.ViewModels
         private void StartTokenRefreshTimer()
         {
             _tokenRefreshTimer?.Dispose();
+#if DEBUG
+            // デバッグ時は5分ごとにリフレッシュ（Twitch APIレート制限内で動作確認用）
+            var interval = TimeSpan.FromMinutes(5);
+#else
             // 3時間ごとに実行（アクセストークンは約4時間で期限切れ）
+            var interval = TimeSpan.FromHours(3);
+#endif
             _tokenRefreshTimer = new Timer(
                 _ => _ = RefreshTokenSilentlyAsync(),
                 null,
-                TimeSpan.FromHours(3),
-                TimeSpan.FromHours(3));
+                interval,
+                interval);
         }
 
         private void StopTokenRefreshTimer()

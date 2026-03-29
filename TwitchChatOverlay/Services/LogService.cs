@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -194,7 +195,11 @@ namespace TwitchChatOverlay.Services
                 }
             }
 
-            _queue.Enqueue(sb.ToString());
+            string logEntry = sb.ToString();
+            _queue.Enqueue(logEntry);
+#if DEBUG
+            System.Diagnostics.Debug.WriteLine(logEntry);
+#endif
 
             try { _signal.Release(); }
             catch { /* 無視 */ }
