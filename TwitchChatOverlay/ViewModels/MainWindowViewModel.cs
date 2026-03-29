@@ -434,7 +434,6 @@ namespace TwitchChatOverlay.ViewModels
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
 
                 await AutoConnectAsync();
-                StartTokenRefreshTimer();
             }
             catch (Exception ex)
             {
