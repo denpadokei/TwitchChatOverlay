@@ -12,39 +12,28 @@ namespace TwitchChatOverlay.Services
         private readonly SettingsService _settingsService;
         private readonly List<ToastNotificationWindow> _activeToasts = new();
 
-        private const double ToastHeight = 90;
+        private const double ToastHeight = 90;  // ActualHeight が取得できない場合の推定値
         private const double ToastMargin = 8;
-        private const double ToastWidth = 380;
         private const double ScreenMargin = 20;
 
-        private (double left, double top) GetToastPosition(ToastPosition position, int index, int monitorIndex)
+        private (double left, double top, double right, double bottom) GetScreenBounds(int monitorIndex)
         {
             var screens = WinForms.Screen.AllScreens;
             var screen = (monitorIndex >= 0 && monitorIndex < screens.Length)
                 ? screens[monitorIndex]
                 : WinForms.Screen.PrimaryScreen;
 
-            // WPF の論理ピクセルへ変換 (DPI スケール考慮)
             var source = System.Windows.PresentationSource.FromVisual(
                 System.Windows.Application.Current.MainWindow);
             double dpiX = source?.CompositionTarget?.TransformFromDevice.M11 ?? 1.0;
             double dpiY = source?.CompositionTarget?.TransformFromDevice.M22 ?? 1.0;
 
-            double screenLeft   = screen.WorkingArea.Left   * dpiX;
-            double screenTop    = screen.WorkingArea.Top    * dpiY;
-            double screenRight  = screen.WorkingArea.Right  * dpiX;
-            double screenBottom = screen.WorkingArea.Bottom * dpiY;
-            double screenWidth  = screen.WorkingArea.Width  * dpiX;
-
-            double left = (position == ToastPosition.TopLeft || position == ToastPosition.BottomLeft)
-                ? screenLeft + ScreenMargin
-                : screenRight - ToastWidth - ScreenMargin;
-
-            double top = (position == ToastPosition.TopLeft || position == ToastPosition.TopRight)
-                ? screenTop + ScreenMargin + index * (ToastHeight + ToastMargin)
-                : screenBottom - ScreenMargin - (index + 1) * (ToastHeight + ToastMargin);
-
-            return (left, top);
+            return (
+                screen.WorkingArea.Left   * dpiX,
+                screen.WorkingArea.Top    * dpiY,
+                screen.WorkingArea.Right  * dpiX,
+                screen.WorkingArea.Bottom * dpiY
+            );
         }
 
         public ToastNotificationService(SettingsService settingsService)
@@ -92,11 +81,24 @@ namespace TwitchChatOverlay.Services
             if (_activeToasts.Count >= maxCount)
                 return;
 
-            var (left, top) = GetToastPosition(settings.ToastPosition, _activeToasts.Count, settings.ToastMonitorIndex);
             double fontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
-            var toast = new ToastNotificationWindow(notification, left, top, fontSize);
+            double toastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
+            double bgOpacity = Math.Clamp(settings.ToastBackgroundOpacity, 0.0, 1.0);
+            string fontFamily = settings.ToastFontFamily ?? "";
+            var bgMode = settings.ToastBackgroundMode;
+            string customBgColor = settings.ToastCustomBackgroundColor ?? "#1A1A2E";
+            var fontColorMode = settings.ToastFontColorMode;
+            string customFontColor = settings.ToastCustomFontColor ?? "#FFFFFF";
+            // 初期位置は (0,0) — ReorderToasts で正しい位置を設定する
+            var toast = new ToastNotificationWindow(
+                notification, 0, 0, fontSize, bgOpacity, toastWidth, fontFamily, bgMode, customBgColor, fontColorMode, customFontColor);
 
             _activeToasts.Add(toast);
+            ReorderToasts(); // ActualHeight が確定する前の暫定配置
+
+            // レンダリング完了後に実際の高さで再整列（特に下揃えの場合に重要）
+            toast.ContentRendered += (s, e) => ReorderToasts();
+
             toast.Closed += (s, e) =>
             {
                 _activeToasts.Remove(toast);
@@ -108,12 +110,40 @@ namespace TwitchChatOverlay.Services
 
         private void ReorderToasts()
         {
+            if (_activeToasts.Count == 0) return;
+
             var settings = _settingsService.LoadSettings();
-            for (int i = 0; i < _activeToasts.Count; i++)
+            var pos = settings.ToastPosition;
+            var (sl, st, sr, sb) = GetScreenBounds(settings.ToastMonitorIndex);
+            double toastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
+
+            bool isLeft = pos == ToastPosition.TopLeft || pos == ToastPosition.BottomLeft;
+            bool isTop  = pos == ToastPosition.TopLeft || pos == ToastPosition.TopRight;
+
+            double left = isLeft ? sl + ScreenMargin : sr - toastWidth - ScreenMargin;
+
+            if (isTop)
             {
-                var (left, top) = GetToastPosition(settings.ToastPosition, i, settings.ToastMonitorIndex);
-                _activeToasts[i].Left = left;
-                _activeToasts[i].Top = top;
+                double y = st + ScreenMargin;
+                foreach (var t in _activeToasts)
+                {
+                    t.Left = left;
+                    t.Top  = y;
+                    double h = t.ActualHeight > 0 ? t.ActualHeight : ToastHeight;
+                    y += h + ToastMargin;
+                }
+            }
+            else
+            {
+                double y = sb - ScreenMargin;
+                foreach (var t in _activeToasts)
+                {
+                    double h = t.ActualHeight > 0 ? t.ActualHeight : ToastHeight;
+                    y -= h;
+                    t.Left = left;
+                    t.Top  = y;
+                    y -= ToastMargin;
+                }
             }
         }
     }

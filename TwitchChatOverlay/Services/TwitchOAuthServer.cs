@@ -40,6 +40,28 @@ namespace TwitchChatOverlay.Services
         }
 
         /// <summary>
+        /// リフレッシュトークンを使ってアクセストークンを更新する。
+        /// </summary>
+        public async Task<DeviceTokenResponse> RefreshTokenAsync(string refreshToken)
+        {
+            var request = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("grant_type", "refresh_token"),
+                new KeyValuePair<string, string>("refresh_token", refreshToken)
+            });
+
+            var response = await _http.PostAsync("https://id.twitch.tv/oauth2/token", request);
+            var json = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"トークンリフレッシュ失敗: {json}");
+
+            return JsonConvert.DeserializeObject<DeviceTokenResponse>(json)
+                ?? throw new Exception("リフレッシュレスポンスの解析に失敗しました");
+        }
+
+        /// <summary>
         /// Device Authorization Grant フローでTwitch認可を行い、アクセストークンを返す。
         /// リダイレクトURLは不要。ユーザーはブラウザでコードを入力するだけ。
         /// </summary>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using Prism.Commands;
@@ -35,6 +36,13 @@ namespace TwitchChatOverlay.ViewModels
         private int _toastPositionIndex = 0;
         private int _toastMonitorIndex = 0;
         private double _toastFontSize = 12;
+        private double _toastWidth = 380;
+        private double _toastBackgroundOpacity = 0.8;
+        private string _toastFontFamily = "";
+        private int _toastBackgroundModeIndex = 0;
+        private string _toastCustomBackgroundColor = "#1A1A2E";
+        private int _toastFontColorModeIndex = 0;
+        private string _toastCustomFontColor = "#FFFFFF";
 
         public ObservableCollection<string> MonitorList { get; } = new();
 
@@ -46,6 +54,7 @@ namespace TwitchChatOverlay.ViewModels
         private readonly TwitchEventSubService _eventSubService;
         private readonly ToastNotificationService _toastService;
         private readonly SettingsService _settingsService;
+        private Timer _tokenRefreshTimer;
 
         public string Title
         {
@@ -186,6 +195,90 @@ namespace TwitchChatOverlay.ViewModels
             set => SetProperty(ref _toastFontSize, value);
         }
 
+        public double ToastWidth
+        {
+            get => _toastWidth;
+            set => SetProperty(ref _toastWidth, value);
+        }
+
+        public double ToastBackgroundOpacity
+        {
+            get => _toastBackgroundOpacity;
+            set
+            {
+                SetProperty(ref _toastBackgroundOpacity, value);
+                RaisePropertyChanged(nameof(ToastBackgroundOpacityPercent));
+            }
+        }
+
+        /// <summary>UI用: 透過率を 0〜100 の整数で表示・入力する。</summary>
+        public int ToastBackgroundOpacityPercent
+        {
+            get => (int)Math.Round(_toastBackgroundOpacity * 100);
+            set
+            {
+                int clamped = Math.Clamp(value, 0, 100);
+                if (SetProperty(ref _toastBackgroundOpacity, clamped / 100.0))
+                    RaisePropertyChanged(nameof(ToastBackgroundOpacity));
+            }
+        }
+
+        public string ToastFontFamily
+        {
+            get => _toastFontFamily;
+            set => SetProperty(ref _toastFontFamily, value);
+        }
+
+        public int ToastBackgroundModeIndex
+        {
+            get => _toastBackgroundModeIndex;
+            set
+            {
+                SetProperty(ref _toastBackgroundModeIndex, value);
+                RaisePropertyChanged(nameof(IsCustomBackgroundColor));
+            }
+        }
+
+        public bool IsCustomBackgroundColor => _toastBackgroundModeIndex == 3;
+
+        public string ToastCustomBackgroundColor
+        {
+            get => _toastCustomBackgroundColor;
+            set => SetProperty(ref _toastCustomBackgroundColor, value);
+        }
+
+        public int ToastFontColorModeIndex
+        {
+            get => _toastFontColorModeIndex;
+            set
+            {
+                SetProperty(ref _toastFontColorModeIndex, value);
+                RaisePropertyChanged(nameof(IsCustomFontColor));
+            }
+        }
+
+        public bool IsCustomFontColor => _toastFontColorModeIndex == 1;
+
+        public string ToastCustomFontColor
+        {
+            get => _toastCustomFontColor;
+            set => SetProperty(ref _toastCustomFontColor, value);
+        }
+
+        public System.Collections.Generic.List<string> FontFamilyPresets { get; } = new()
+        {
+            "",
+            "Meiryo UI",
+            "Yu Gothic UI",
+            "MS UI Gothic",
+            "BIZ UDGothic",
+            "HGPGothicE",
+            "Segoe UI",
+            "Arial",
+            "Consolas",
+            "Impact",
+        };
+
         public ICommand ConnectCommand { get; }
         public ICommand DisconnectCommand { get; }
         public ICommand AuthorizeOAuthCommand { get; }
@@ -210,6 +303,9 @@ namespace TwitchChatOverlay.ViewModels
             SelectRecentChannelCommand = new DelegateCommand<string>(ch => ChannelName = ch);
 
             _toastService.Initialize(_eventSubService);
+
+            // 予期しない切断（トークン期限切れ等）時に自動再接続
+            _eventSubService.ConnectionLost += OnConnectionLost;
 
             // モニター一覧を構築
             var screens = WinForms.Screen.AllScreens;
@@ -243,12 +339,108 @@ namespace TwitchChatOverlay.ViewModels
 
                 await _eventSubService.ConnectAsync(OAuthToken, ClientId, broadcasterUserId, userId);
                 StatusMessage = $"✅ 接続完了 ({ChannelName})";
+                StartTokenRefreshTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
             }
             catch (Exception ex)
             {
                 StatusMessage = $"自動接続エラー: {ex.Message}";
+            }
+        }
+
+        /// <summary>接続完了後に3時間ごとのトークン予防的リフレッシュタイマーを開始する。</summary>
+        private void StartTokenRefreshTimer()
+        {
+            _tokenRefreshTimer?.Dispose();
+            // 3時間ごとに実行（アクセストークンは約4時間で期限切れ）
+            _tokenRefreshTimer = new Timer(
+                _ => _ = RefreshTokenSilentlyAsync(),
+                null,
+                TimeSpan.FromHours(3),
+                TimeSpan.FromHours(3));
+        }
+
+        private void StopTokenRefreshTimer()
+        {
+            _tokenRefreshTimer?.Dispose();
+            _tokenRefreshTimer = null;
+        }
+
+        /// <summary>バックグラウンドでトークンをリフレッシュし、接続中なら再接続する。</summary>
+        private async Task RefreshTokenSilentlyAsync()
+        {
+            var settings = _settingsService.LoadSettings();
+            if (string.IsNullOrEmpty(settings.RefreshToken))
+                return;
+
+            try
+            {
+                var oauthServer = new TwitchOAuthServer(ClientId);
+                var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
+
+                OAuthToken = newToken.AccessToken;
+                settings.OAuthToken = newToken.AccessToken;
+                settings.RefreshToken = newToken.RefreshToken;
+                settings.OAuthTokenSavedAt = DateTime.UtcNow;
+                _settingsService.SaveSettings(settings);
+
+                string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+
+                // 接続中であればトークンを更新して再接続
+                if (_eventSubService.IsConnected)
+                {
+                    _eventSubService.Disconnect();
+                    await Task.Delay(500);
+                    await AutoConnectAsync();
+                }
+            }
+            catch
+            {
+                // サイレントなのでエラーは無視（切断イベントで再試行される）
+            }
+        }
+
+        /// <summary>予期しない切断時に呼ばれる。トークンをリフレッシュして再接続を試みる。</summary>
+        private async void OnConnectionLost(object sender, EventArgs e)
+        {
+            StopTokenRefreshTimer();
+            ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
+            ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+
+            var settings = _settingsService.LoadSettings();
+            if (string.IsNullOrEmpty(settings.RefreshToken))
+            {
+                StatusMessage = "⚠️ 接続が切断されました。再接続するにはOAuth再認可が必要です";
+                return;
+            }
+
+            try
+            {
+                StatusMessage = "🔄 接続が切断されました。トークンを更新して再接続中...";
+                await Task.Delay(2000); // 少し待ってから再接続
+
+                var oauthServer = new TwitchOAuthServer(ClientId);
+                var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
+
+                OAuthToken = newToken.AccessToken;
+                settings.OAuthToken = newToken.AccessToken;
+                settings.RefreshToken = newToken.RefreshToken;
+                settings.OAuthTokenSavedAt = DateTime.UtcNow;
+                _settingsService.SaveSettings(settings);
+
+                string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+
+                await AutoConnectAsync();
+                StartTokenRefreshTimer();
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"⚠️ 再接続失敗: {ex.Message}　再認可してください";
+                TokenInfo = "⚠️ トークンの更新に失敗しました。再認可してください";
+                OAuthToken = "";
             }
         }
 
@@ -284,6 +476,33 @@ namespace TwitchChatOverlay.ViewModels
                 }
                 else
                 {
+                    // リフレッシュトークンで自動更新を試みる
+                    var settings = _settingsService.LoadSettings();
+                    if (!string.IsNullOrEmpty(settings.RefreshToken))
+                    {
+                        try
+                        {
+                            TokenInfo = "🔄 トークンを更新中...";
+                            var oauthServer = new TwitchOAuthServer(ClientId);
+                            var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
+
+                            OAuthToken = newToken.AccessToken;
+                            settings.OAuthToken = newToken.AccessToken;
+                            settings.RefreshToken = newToken.RefreshToken;
+                            settings.OAuthTokenSavedAt = DateTime.UtcNow;
+                            _settingsService.SaveSettings(settings);
+
+                            string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                            TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                            await AutoConnectAsync();
+                            return;
+                        }
+                        catch
+                        {
+                            // リフレッシュ失敗 → 再認可を促す
+                        }
+                    }
+
                     TokenInfo = "⚠️ トークンの有効期限が切れました。再認可してください";
                     OAuthToken = "";
                 }
@@ -325,6 +544,7 @@ namespace TwitchChatOverlay.ViewModels
                 settings.UserId = userId;
                 settings.BroadcasterUserId = userId;
                 settings.OAuthToken = OAuthToken;
+                settings.RefreshToken = tokenResponse.RefreshToken;
                 settings.ClientId = ClientId;
                 settings.OAuthTokenSavedAt = DateTime.UtcNow;
                 settings.OAuthTokenLogin = login;
@@ -388,6 +608,7 @@ namespace TwitchChatOverlay.ViewModels
 
                 await _eventSubService.ConnectAsync(OAuthToken, ClientId, broadcasterUserId, userId);
                 StatusMessage = $"✅ 接続完了 ({ChannelName})";
+                StartTokenRefreshTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
             }
@@ -399,6 +620,7 @@ namespace TwitchChatOverlay.ViewModels
 
         private void Disconnect()
         {
+            StopTokenRefreshTimer();
             _eventSubService.Disconnect();
             StatusMessage = "切断しました";
             ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
@@ -429,6 +651,13 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ToastPosition = (Services.ToastPosition)ToastPositionIndex;
                 settings.ToastMonitorIndex = ToastMonitorIndex;
                 settings.ToastFontSize = ToastFontSize;
+                settings.ToastWidth = ToastWidth;
+                settings.ToastBackgroundOpacity = ToastBackgroundOpacity;
+                settings.ToastFontFamily = ToastFontFamily;
+                settings.ToastBackgroundMode = (Services.ToastBackgroundMode)ToastBackgroundModeIndex;
+                settings.ToastCustomBackgroundColor = ToastCustomBackgroundColor;
+                settings.ToastFontColorMode = (Services.ToastFontColorMode)ToastFontColorModeIndex;
+                settings.ToastCustomFontColor = ToastCustomFontColor;
 
                 _settingsService.SaveSettings(settings);
                 StatusMessage = "✅ 設定を保存しました";
@@ -466,6 +695,17 @@ namespace TwitchChatOverlay.ViewModels
                 ToastMonitorIndex = (settings.ToastMonitorIndex >= 0 && settings.ToastMonitorIndex < WinForms.Screen.AllScreens.Length)
                     ? settings.ToastMonitorIndex : 0;
                 ToastFontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
+                ToastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
+                ToastBackgroundOpacity = settings.ToastBackgroundOpacity > 0 ? settings.ToastBackgroundOpacity : 0.8;
+                ToastFontFamily = settings.ToastFontFamily ?? "";
+                ToastBackgroundModeIndex = (int)settings.ToastBackgroundMode;
+                ToastCustomBackgroundColor = string.IsNullOrEmpty(settings.ToastCustomBackgroundColor)
+                    ? "#1A1A2E"
+                    : settings.ToastCustomBackgroundColor;
+                ToastFontColorModeIndex = (int)settings.ToastFontColorMode;
+                ToastCustomFontColor = string.IsNullOrEmpty(settings.ToastCustomFontColor)
+                    ? "#FFFFFF"
+                    : settings.ToastCustomFontColor;
             }
             catch (Exception ex)
             {
