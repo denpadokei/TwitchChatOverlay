@@ -21,6 +21,7 @@ namespace TwitchChatOverlay
             containerRegistry.RegisterSingleton<TwitchApiService>();
             containerRegistry.RegisterSingleton<TwitchEventSubService>();
             containerRegistry.RegisterSingleton<ToastNotificationService>();
+            containerRegistry.RegisterSingleton<UpdateService>();
         }
     }
 }

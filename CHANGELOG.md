@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.3.0] - 2026-03-29
+
+### Added
+- アプリ起動時に GitHub Releases から最新バージョンを自動確認
+  - `UpdateService` を新規追加（`Services/UpdateService.cs`）
+  - GitHub API (`/repos/denpadokei/TwitchChatOverlay/releases/latest`) を使用
+  - 現バージョンより新しいリリースがある場合、メインウィンドウ上部に更新バナーを表示
+- 更新バナーに「⬇ 更新する」ボタンを追加
+  - 最新アセット（`.exe` / `.zip`）を `%TEMP%\TwitchChatOverlay\` へ自動ダウンロード
+  - ダウンロード中は進捗バーを表示し、ボタンを無効化
+  - `.exe` の場合はインストーラーを起動してアプリを終了
+  - `.zip` の場合は解凍後、アプリのインストールフォルダへ上書きコピーしてアプリを再起動
+- 更新バナーに「🔗 リリースページ」ボタンを追加（ブラウザで GitHub Releases ページを開く）
+
+---
+
+## [0.2.0] - 2026-03-29
+
 ### Added
 - リフレッシュトークンによるアクセストークンの自動更新
   - `AppSettings` に `RefreshToken` プロパティを追加
