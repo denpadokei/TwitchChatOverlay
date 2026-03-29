@@ -21,11 +21,25 @@ namespace TwitchChatOverlay.Views
         [DllImport("user32.dll")]
         private static extern int SetWindowLong(IntPtr hwnd, int index, int newStyle);
 
-        public ToastNotificationWindow(OverlayNotification notification, double left, double top)
+        public ToastNotificationWindow(
+            OverlayNotification notification,
+            double left,
+            double top,
+            double fontSize,
+            double backgroundOpacity = 0.8,
+            double windowWidth = 380,
+            string fontFamily = "",
+            Services.ToastBackgroundMode bgMode = Services.ToastBackgroundMode.Dark,
+            string customBgColor = "#1A1A2E",
+            Services.ToastFontColorMode fontColorMode = Services.ToastFontColorMode.Auto,
+            string customFontColor = "#FFFFFF")
         {
             InitializeComponent();
-            DataContext = new ViewModels.ToastNotificationViewModel(notification);
+            DataContext = new ViewModels.ToastNotificationViewModel(
+                notification, fontSize, backgroundOpacity, fontFamily,
+                bgMode, customBgColor, fontColorMode, customFontColor);
 
+            Width = windowWidth;
             Left = left;
             Top = top;
         }

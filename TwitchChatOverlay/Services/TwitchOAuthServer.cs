@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,6 +38,47 @@ namespace TwitchChatOverlay.Services
         public TwitchOAuthServer(string clientId)
         {
             _clientId = clientId;
+        }
+
+        /// <summary>
+        /// リフレッシュトークンを使ってアクセストークンを更新する。
+        /// </summary>
+        public async Task<DeviceTokenResponse> RefreshTokenAsync(string refreshToken)
+        {
+            var request = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("grant_type", "refresh_token"),
+                new KeyValuePair<string, string>("refresh_token", refreshToken)
+            });
+
+            var response = await _http.PostAsync("https://id.twitch.tv/oauth2/token", request);
+            var json = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var baseMessage = $"トークンリフレッシュ失敗 (StatusCode: {(int)response.StatusCode})";
+                try
+                {
+                    var obj = JObject.Parse(json);
+                    var error = (string?)obj["error"];
+                    var message = (string?)obj["message"];
+
+                    if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(message))
+                    {
+                        var detail = string.Join(": ", new[] { error, message }.Where(s => !string.IsNullOrEmpty(s)));
+                        baseMessage = $"{baseMessage}: {detail}";
+                    }
+                }
+                catch (JsonException)
+                {
+                    // 応答本文がJSONでない場合は、ステータスコードのみを使用する
+                }
+
+                throw new Exception(baseMessage);
+            }
+            return JsonConvert.DeserializeObject<DeviceTokenResponse>(json)
+                ?? throw new Exception("リフレッシュレスポンスの解析に失敗しました");
         }
 
         /// <summary>

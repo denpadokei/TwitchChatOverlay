@@ -23,6 +23,8 @@ namespace TwitchChatOverlay.Services
         private const string EventSubWssUrl = "wss://eventsub.wss.twitch.tv/ws";
 
         public event EventHandler<OverlayNotification> NotificationReceived;
+        /// <summary>予期しない切断（トークン期限切れ等）が発生したときに発火します。</summary>
+        public event EventHandler ConnectionLost;
         public bool IsConnected { get; private set; }
 
         public TwitchEventSubService(TwitchApiService apiService)
@@ -85,12 +87,20 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception)
             {
-                // 接続が切れた場合は再接続を試みない (将来拡張)
+                // 予期しない切断 → ConnectionLost を通知
+                IsConnected = false;
+                ConnectionLost?.Invoke(this, EventArgs.Empty);
+                return;
             }
             finally
             {
                 IsConnected = false;
             }
+
+            // ループが正常終了した場合（Close フレーム受信）でも、
+            // キャンセルによるものでなければ ConnectionLost を通知する
+            if (!_cts.IsCancellationRequested)
+                ConnectionLost?.Invoke(this, EventArgs.Empty);
         }
 
         private async Task HandleMessageAsync(string raw)

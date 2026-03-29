@@ -9,15 +9,15 @@
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"
-        Width="380"
         SizeToContent="Height"
         Opacity="0">
     <Window.Resources>
         <!-- テキストフラグメント -->
         <DataTemplate DataType="{x:Type models:TextFragment}">
             <TextBlock Text="{Binding Text}"
-                       Foreground="#FFFFFF"
-                       FontSize="12"
+                       Foreground="{Binding DataContext.TextForegroundBrush, RelativeSource={RelativeSource AncestorType=Window}}"
+                       FontFamily="{Binding DataContext.FontFamily, RelativeSource={RelativeSource AncestorType=Window}}"
+                       FontSize="{Binding DataContext.FontSize, RelativeSource={RelativeSource AncestorType=Window}}"
                        VerticalAlignment="Center"
                        TextWrapping="Wrap"/>
         </DataTemplate>
@@ -52,7 +52,7 @@
 
     <Border CornerRadius="8"
             Margin="5"
-            Background="#CC1A1A2E"
+            Background="{Binding BackgroundBrush}"
             Effect="{x:Null}">
         <Grid>
             <Grid.ColumnDefinitions>
@@ -66,16 +66,17 @@
                     CornerRadius="8,0,0,8"/>
 
             <!-- コンテンツ -->
-            <StackPanel Grid.Column="1" Margin="10,10,10,10">
+            <StackPanel Grid.Column="1" Margin="10,10,10,10"
+                        TextElement.FontFamily="{Binding FontFamily}">
                 <!-- タイプアイコン + ユーザー名 -->
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="{Binding TypeIcon}"
-                               FontSize="14"
+                               FontSize="{Binding UsernameFontSize}"
                                VerticalAlignment="Center"
                                Margin="0,0,6,0"/>
                     <TextBlock Text="{Binding Username}"
                                FontWeight="Bold"
-                               FontSize="13"
+                               FontSize="{Binding UsernameFontSize}"
                                Foreground="{Binding UserColorBrush}"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"
@@ -95,17 +96,16 @@
 
                 <!-- メインテキスト (プレーンテキスト) -->
                 <TextBlock Text="{Binding DisplayText}"
-                           Foreground="#FFFFFF"
-                           FontSize="12"
+                           Foreground="{Binding TextForegroundBrush}"
+                           FontSize="{Binding FontSize}"
                            TextWrapping="Wrap"
                            Margin="0,4,0,0"
-                           MaxHeight="60"
                            Visibility="{Binding NoFragments, Converter={StaticResource BooleanToVisibilityConverter}}"/>
 
                 <!-- サブテキスト（オプション） -->
                 <TextBlock Text="{Binding SubText}"
-                           Foreground="#AAAAAA"
-                           FontSize="11"
+                           Foreground="{Binding SubTextForegroundBrush}"
+                           FontSize="{Binding SubTextFontSize}"
                            TextWrapping="Wrap"
                            Margin="0,3,0,0"
                            Visibility="{Binding HasSubText, Converter={StaticResource BooleanToVisibilityConverter}}"/>
