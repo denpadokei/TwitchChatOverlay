@@ -122,6 +122,9 @@ namespace TwitchChatOverlay.Services
 
         public void LaunchInstaller(string filePath)
         {
+            string currentExe = Process.GetCurrentProcess().MainModule!.FileName;
+            string currentDir = Path.GetDirectoryName(currentExe)!;
+
             if (filePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
                 Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
@@ -136,8 +139,33 @@ namespace TwitchChatOverlay.Services
                 if (Directory.Exists(extractDir))
                     Directory.Delete(extractDir, true);
                 ZipFile.ExtractToDirectory(filePath, extractDir);
-                Process.Start(new ProcessStartInfo("explorer.exe", extractDir)
-                    { UseShellExecute = true });
+
+                int pid = Process.GetCurrentProcess().Id;
+                string tempDir = Path.GetDirectoryName(filePath)!;
+
+                // cmd.exe のバッチファイルで自己更新（PowerShell Bypass を回避）
+                string scriptContent =
+                    $"@echo off\r\n" +
+                    $":wait\r\n" +
+                    $"tasklist /FI \"PID eq {pid}\" 2>NUL | find \" {pid} \" >NUL\r\n" +
+                    $"if not errorlevel 1 (timeout /t 1 /nobreak >NUL & goto wait)\r\n" +
+                    $"xcopy /Y /E /Q \"{extractDir}\\*\" \"{currentDir}\\\"\r\n" +
+                    $"start \"\" \"{currentExe}\"\r\n" +
+                    $"ping -n 4 127.0.0.1 >NUL\r\n" +
+                    $"rd /S /Q \"{tempDir}\"\r\n";
+
+                string scriptPath = Path.Combine(
+                    Path.GetTempPath(), "TwitchChatOverlay_update.bat");
+                File.WriteAllText(scriptPath, scriptContent, System.Text.Encoding.Default);
+
+                Process.Start(new ProcessStartInfo("cmd.exe", $"/C \"{scriptPath}\"")
+                {
+                    UseShellExecute = true,
+                    WindowStyle = ProcessWindowStyle.Minimized,
+                });
+
+                System.Windows.Application.Current.Dispatcher.Invoke(
+                    () => System.Windows.Application.Current.Shutdown());
             }
         }
 
