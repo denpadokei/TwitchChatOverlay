@@ -52,8 +52,9 @@ namespace TwitchChatOverlay.Services
                 string userId = json["user_id"]?.ToString();
                 return (true, login, userId);
             }
-            catch
+            catch (Exception ex)
             {
+                LogService.Warning("トークン検証中にネットワークエラーが発生しました", ex);
                 return (false, null, null);
             }
         }

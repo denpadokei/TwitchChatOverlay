@@ -34,6 +34,7 @@ namespace TwitchChatOverlay.Services
 
         public async Task ConnectAsync(string accessToken, string clientId, string broadcasterUserId, string userId)
         {
+            LogService.Info($"WebSocket接続開始: broadcaster={broadcasterUserId}");
             _accessToken = accessToken;
             _clientId = clientId;
             _broadcasterUserId = broadcasterUserId;
@@ -45,15 +46,18 @@ namespace TwitchChatOverlay.Services
 
         public void Disconnect()
         {
+            LogService.Info("WebSocket切断要求");
             _cts?.Cancel();
             IsConnected = false;
         }
 
         private async Task ConnectWebSocketAsync(string url)
         {
+            LogService.Info($"WebSocket接続中: {url}");
             _webSocket = new ClientWebSocket();
             await _webSocket.ConnectAsync(new Uri(url), _cts.Token);
             IsConnected = true;
+            LogService.Info("WebSocket接続完了");
             _ = ReceiveLoopAsync();
         }
 
@@ -84,10 +88,12 @@ namespace TwitchChatOverlay.Services
             catch (OperationCanceledException)
             {
                 // 正常切断
+                LogService.Info("WebSocketループ正常終了（キャンセル）");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // 予期しない切断 → ConnectionLost を通知
+                LogService.Error("WebSocket予期しない切断が発生しました", ex);
                 IsConnected = false;
                 ConnectionLost?.Invoke(this, EventArgs.Empty);
                 return;
@@ -133,9 +139,10 @@ namespace TwitchChatOverlay.Services
                         break;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // 個々のメッセージのパースエラーは無視
+                LogService.Warning("EventSubメッセージのパースエラー（無視）", ex);
             }
         }
 

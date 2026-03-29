@@ -41,6 +41,7 @@ namespace TwitchChatOverlay.Services
 
         public async Task<UpdateCheckResult> CheckForUpdateAsync()
         {
+            LogService.Info("アップデートチェック開始");
             var response = await _http.GetStringAsync(ApiUrl);
             var json = JObject.Parse(response);
 
@@ -85,6 +86,7 @@ namespace TwitchChatOverlay.Services
                 }
             }
 
+            LogService.Info($"アップデート利用可能: {tagName}");
             return new UpdateCheckResult
             {
                 IsUpdateAvailable = true,
@@ -138,6 +140,8 @@ namespace TwitchChatOverlay.Services
                 throw new InvalidOperationException("ダウンロード先ファイル名を決定できません。");
             string destPath = Path.Combine(tempDir, fileName);
 
+            LogService.Info($"アップデートファイルダウンロード開始: {fileName}");
+
             using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
@@ -165,6 +169,7 @@ namespace TwitchChatOverlay.Services
             if (!string.IsNullOrEmpty(checksumUrl))
                 await VerifySha256Async(destPath, checksumUrl);
 
+            LogService.Info($"ダウンロード完了およびSHA256検証成功: {destPath}");
             return destPath;
         }
 
@@ -202,6 +207,7 @@ namespace TwitchChatOverlay.Services
 
         public void LaunchInstaller(string filePath)
         {
+            LogService.Info($"インストーラー起動: {filePath}");
             string currentExe = Process.GetCurrentProcess().MainModule!.FileName;
             string currentDir = Path.GetDirectoryName(currentExe)!;
 

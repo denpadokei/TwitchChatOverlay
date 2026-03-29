@@ -11,6 +11,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2026-03-30
+
+### Added
+- ログ機能を新規実装
+  - `Services/LogService.cs` を新規追加（外部ライブラリ不使用、.NET 標準機能のみ）
+  - ログ保存先: `%APPDATA%\TwitchChatOverlay\logs\TwitchChatOverlay_YYYY-MM-DD.log`（設定ファイルと同じ `TwitchChatOverlay` フォルダ配下）
+  - ログエントリに **時刻・ファイル名・行番号・メソッド名** を自動付与（`CallerFilePath` / `CallerLineNumber` / `CallerMemberName` 属性を使用）
+  - ログレベル: `Debug` / `Info` / `Warning` / `Error` の4段階
+  - `Exception` を渡すと型名・メッセージ・`InnerException`・スタックトレースを自動記録
+  - `ConcurrentQueue` + バックグラウンドタスクによる非同期書き込み（UIスレッドをブロックしない）
+  - 日次ログローテーション（日付が変わると新ファイルを自動作成）
+  - 起動時に30日超の古いログファイルを自動削除
+  - `MinLevel` プロパティでフィルタリングレベルを動的に変更可能
+  - `Flush()` / `Shutdown()` でアプリ終了時にキュー内の残ログを確実に書き出し
+- グローバル未処理例外ハンドラを `App.xaml.cs` に登録
+  - `Application.DispatcherUnhandledException`（UIスレッドの未捕捉例外）
+  - `AppDomain.CurrentDomain.UnhandledException`（致命的なバックグラウンド例外）
+  - `TaskScheduler.UnobservedTaskException`（非同期タスクの未観測例外）
+- 各サービス・ViewModel の既存エラー処理箇所に `LogService.Error()` / `LogService.Warning()` を追加
+  - `SettingsService`: 設定保存・読込エラー
+  - `TwitchApiService`: トークン検証ネットワークエラー
+  - `TwitchEventSubService`: 接続・切断イベント（Info）、予期しない切断（Error）、メッセージパースエラー（Warning）
+  - `TwitchOAuthServer`: ブラウザ起動失敗・JSONパースエラー
+  - `TwitchTokenExchange`: トークン交換エラー
+  - `UpdateService`: アップデート検出・ダウンロード・インストール（Info）
+  - `ToastNotificationService`: トースト表示エラー
+  - `MainWindowViewModel`: 接続・切断・OAuth認可・設定保存・再接続の全エラーおよび成功イベント（Info）
+
+---
+
 ## [0.3.0] - 2026-03-29
 
 ### Added

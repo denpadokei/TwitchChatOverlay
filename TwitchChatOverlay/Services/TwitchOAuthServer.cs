@@ -70,10 +70,11 @@ namespace TwitchChatOverlay.Services
                         baseMessage = $"{baseMessage}: {detail}";
                     }
                 }
-                catch (JsonException)
-                {
-                    // 応答本文がJSONでない場合は、ステータスコードのみを使用する
-                }
+            catch (JsonException)
+            {
+                // 応答本文がJSONでない場合は、ステータスコードのみを使用する
+                LogService.Warning("リフレッシュレスポンスがJSON形式でないため、エラー詳細を取得できませんでした");
+            }
 
                 throw new Exception(baseMessage);
             }
@@ -129,7 +130,7 @@ namespace TwitchChatOverlay.Services
                     UseShellExecute = true
                 });
             }
-            catch { /* ブラウザが開けなくても継続 */ }
+            catch (Exception ex) { LogService.Warning("ブラウザを開けませんでした（継続）", ex); }
 
             // Step 2: トークンが発行されるまでポーリング
             var deadline = DateTime.UtcNow.AddSeconds(expiresIn);

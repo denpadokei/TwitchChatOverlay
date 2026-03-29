@@ -52,7 +52,8 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception ex)
             {
-                throw new Exception($"トークン交換エラー: {ex.Message}", ex);
+                LogService.Error("?????????", ex);
+                throw new Exception($"g[???????: {ex.Message}", ex);
             }
         }
     }

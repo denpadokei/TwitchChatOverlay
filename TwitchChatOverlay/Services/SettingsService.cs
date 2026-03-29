@@ -100,6 +100,7 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception ex)
             {
+                LogService.Error("設定の保存に失敗しました", ex);
                 throw new Exception($"設定の保存に失敗しました: {ex.Message}", ex);
             }
         }
@@ -151,6 +152,7 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception ex)
             {
+                LogService.Error("設定の読み込みに失敗しました", ex);
                 throw new Exception($"設定の読み込みに失敗しました: {ex.Message}", ex);
             }
         }
