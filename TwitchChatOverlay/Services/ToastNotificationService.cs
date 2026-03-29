@@ -23,11 +23,22 @@ namespace TwitchChatOverlay.Services
                 ? screens[monitorIndex]
                 : WinForms.Screen.PrimaryScreen;
 
-            var source = System.Windows.PresentationSource.FromVisual(
-                System.Windows.Application.Current.MainWindow);
-            double dpiX = source?.CompositionTarget?.TransformFromDevice.M11 ?? 1.0;
-            double dpiY = source?.CompositionTarget?.TransformFromDevice.M22 ?? 1.0;
+            // Default DPI to 1.0 when Application.Current or MainWindow is not available.
+            double dpiX = 1.0;
+            double dpiY = 1.0;
 
+            var app = System.Windows.Application.Current;
+            var mainWindow = app?.MainWindow;
+            if (mainWindow != null)
+            {
+                var source = System.Windows.PresentationSource.FromVisual(mainWindow);
+                var compositionTarget = source?.CompositionTarget;
+                if (compositionTarget != null)
+                {
+                    dpiX = compositionTarget.TransformFromDevice.M11;
+                    dpiY = compositionTarget.TransformFromDevice.M22;
+                }
+            }
             return (
                 screen.WorkingArea.Left   * dpiX,
                 screen.WorkingArea.Top    * dpiY,
