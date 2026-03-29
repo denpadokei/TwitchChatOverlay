@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 最新アセット（`.exe` / `.zip`）を `%TEMP%\TwitchChatOverlay\` へ自動ダウンロード
   - ダウンロード中は進捗バーを表示し、ボタンを無効化
   - `.exe` の場合はインストーラーを起動してアプリを終了
-  - `.zip` の場合は解凍して Explorer でフォルダを開く
+  - `.zip` の場合は解凍後、アプリのインストールフォルダへ上書きコピーしてアプリを再起動
 - 更新バナーに「🔗 リリースページ」ボタンを追加（ブラウザで GitHub Releases ページを開く）
 
 ---

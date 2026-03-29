@@ -25,12 +25,20 @@ namespace TwitchChatOverlay.Services
         private const string ApiUrl =
             "https://api.github.com/repos/denpadokei/TwitchChatOverlay/releases/latest";
 
+        // API 呼び出し用（既定タイムアウト100秒で十分）
         private static readonly HttpClient _http = new();
+
+        // ダウンロード用（大きなファイルのタイムアウトを防ぐため無制限）
+        private static readonly HttpClient _downloadHttp = new()
+        {
+            Timeout = System.Threading.Timeout.InfiniteTimeSpan,
+        };
 
         static UpdateService()
         {
-            _http.DefaultRequestHeaders.UserAgent.Add(
-                new ProductInfoHeaderValue("TwitchChatOverlay", GetCurrentVersion()));
+            var userAgent = new ProductInfoHeaderValue("TwitchChatOverlay", GetCurrentVersion());
+            _http.DefaultRequestHeaders.UserAgent.Add(userAgent);
+            _downloadHttp.DefaultRequestHeaders.UserAgent.Add(userAgent);
         }
 
         private static string GetCurrentVersion()
@@ -61,27 +69,48 @@ namespace TwitchChatOverlay.Services
             if (latestVersion <= currentVersion)
                 return new UpdateCheckResult { IsUpdateAvailable = false };
 
-            // アセットから .exe または .zip、および対応する .sha256 を探す
+            // アセットから .exe または .zip を探し、そのファイル名に対応する .sha256 をペアリングして取得する
             string downloadUrl = null;
             string checksumUrl = null;
             var assets = json["assets"] as JArray;
             if (assets != null)
             {
+                string downloadName = null;
+
+                // まずダウンロード対象のアセット (.exe 優先, なければ .zip) を決定する
                 foreach (var asset in assets)
                 {
                     string name = asset["name"]?.Value<string>() ?? "";
                     string assetUrl = asset["browser_download_url"]?.Value<string>();
 
-                    if (name.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase))
+                    if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                     {
-                        checksumUrl = assetUrl;
-                    }
-                    else if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
-                             name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-                    {
+                        downloadName = name;
                         downloadUrl = assetUrl;
-                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                            break; // .exe があれば優先
+                        break; // .exe があれば優先
+                    }
+
+                    if (downloadUrl == null &&
+                        name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        downloadName = name;
+                        downloadUrl = assetUrl;
+                    }
+                }
+
+                // ダウンロード対象が決まっていれば、そのファイル名に対応する .sha256 を探す
+                if (downloadName != null)
+                {
+                    string checksumTargetName = downloadName + ".sha256";
+
+                    foreach (var asset in assets)
+                    {
+                        string name = asset["name"]?.Value<string>() ?? "";
+                        if (name.Equals(checksumTargetName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            checksumUrl = asset["browser_download_url"]?.Value<string>();
+                            break;
+                        }
                     }
                 }
             }
@@ -140,9 +169,7 @@ namespace TwitchChatOverlay.Services
                 throw new InvalidOperationException("ダウンロード先ファイル名を決定できません。");
             string destPath = Path.Combine(tempDir, fileName);
 
-            LogService.Info($"アップデートファイルダウンロード開始: {fileName}");
-
-            using var response = await _http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            using var response = await _downloadHttp.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
 
             long? totalBytes = response.Content.Headers.ContentLength;
@@ -183,8 +210,15 @@ namespace TwitchChatOverlay.Services
 
             string checksumText = await _http.GetStringAsync(checksumUrl);
             // 最初のトークン（空白区切り）がハッシュ値
-            string expectedHash = checksumText.Split(new[] { ' ', '\t', '\r', '\n' },
-                StringSplitOptions.RemoveEmptyEntries)[0].ToLowerInvariant();
+            var tokens = checksumText.Split(new[] { ' ', '\t', '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 0 || string.IsNullOrWhiteSpace(tokens[0]))
+            {
+                File.Delete(localFilePath);
+                throw new InvalidOperationException(
+                    "SHA256 チェックサムファイル(.sha256)の形式が不正です。ファイルが空か、ハッシュ値が含まれていません。");
+            }
+            string expectedHash = tokens[0].ToLowerInvariant();
 
             string actualHash = await ComputeSha256Async(localFilePath);
 
@@ -230,8 +264,10 @@ namespace TwitchChatOverlay.Services
                 string tempDir = Path.GetDirectoryName(filePath)!;
 
                 // cmd.exe のバッチファイルで自己更新（PowerShell Bypass を回避）
+                // chcp 65001 で UTF-8 コードページに切り替え、Unicode パスに対応
                 string scriptContent =
                     $"@echo off\r\n" +
+                    $"chcp 65001 >NUL\r\n" +
                     $":wait\r\n" +
                     $"tasklist /FI \"PID eq {pid}\" 2>NUL | find \" {pid} \" >NUL\r\n" +
                     $"if not errorlevel 1 (timeout /t 1 /nobreak >NUL & goto wait)\r\n" +
@@ -241,8 +277,11 @@ namespace TwitchChatOverlay.Services
                     $"rd /S /Q \"{tempDir}\"\r\n";
 
                 string scriptPath = Path.Combine(
-                    Path.GetTempPath(), "TwitchChatOverlay_update.bat");
-                File.WriteAllText(scriptPath, scriptContent, System.Text.Encoding.Default);
+                    Path.GetTempPath(),
+                    $"TwitchChatOverlay_update_{pid}_{Guid.NewGuid():N}.bat");
+                using var fsBat = new FileStream(scriptPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                using var writer = new StreamWriter(fsBat, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                writer.Write(scriptContent);
 
                 Process.Start(new ProcessStartInfo("cmd.exe", $"/C \"{scriptPath}\"")
                 {
