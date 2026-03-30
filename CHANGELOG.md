@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.1] - 2026-03-30
 
 ### Added
+- トークンリフレッシュ関連のデバッグログを充実
+  - `TwitchOAuthServer.RefreshTokenAsync()` に以下のログを追加
+    - リフレッシュ開始時: `refresh_token` の末尾4文字のみ表示
+    - HTTP レスポンス: ステータスコードと所要時間 (ms)
+    - 成功時: 新アクセストークンの末尾4文字と付与されたスコープ一覧
+    - 失敗時: エラー詳細
+  - `RefreshTokenSilentlyAsync()`: タイマー起動・成功 (ユーザー名)・再接続実行/完了をデバッグログ出力
+  - `OnConnectionLost()`: トークン更新成功・再接続開始をデバッグログ出力
+  - `ValidateSavedTokenAsync()`: 起動時更新の開始・成功をデバッグログ出力
 - ビルド時シークレット自動注入の仕組みを実装
   - `build/Generate-BuildSecrets.ps1` を新規追加
   - ビルドプロパティ `TwitchClientId` / `TwitchClientSecret` を MSBuild ターゲット (`GenerateBuildSecrets`) でビルド前に受け取り、XOR 難読化した `BuildSecrets.g.cs` を `obj/` 以下に自動生成
@@ -47,21 +56,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `TwitchApiService`: トークン検証ネットワークエラー
   - `TwitchEventSubService`: 接続・切断イベント（Info）、予期しない切断（Error）、メッセージパースエラー（Warning）
   - `TwitchOAuthServer`: ブラウザ起動失敗・JSONパースエラー
-  - `TwitchTokenExchange`: トークン交換エラー
   - `UpdateService`: アップデート検出・ダウンロード・インストール（Info）
   - `ToastNotificationService`: トースト表示エラー
   - `MainWindowViewModel`: 接続・切断・OAuth認可・設定保存・再接続の全エラーおよび成功イベント（Info）
 
 ### Changed
-- `ClientId` / `ClientSecret` をコードに直書きしないよう変更
+- **クライアントシークレット完全除去 — DCF パブリッククライアント化**
+  - Twitch の Device Code Grant Flow はパブリッククライアントとして動作可能なため、クライアントシークレットを不要とする構成に変更
+  - `TwitchOAuthServer` コンストラクタから `clientSecret` パラメータを削除
+  - `TwitchOAuthServer.RefreshTokenAsync()` のリクエストから `client_secret` フィールドを削除（パブリック DCF クライアントはシークレットなしでリフレッシュ可能）
+  - `MainWindowViewModel` 内の `new TwitchOAuthServer(...)` 呼び出し全箇所から `BuildSecrets.ClientSecret` を削除
+  - `build/Generate-BuildSecrets.ps1` から `ClientSecret` パラメータ・XOR エンコード処理・生成コードの `ClientSecret` プロパティを削除
+  - `TwitchChatOverlay.csproj` から `<TwitchClientSecret>` プロパティと `-ClientSecret` MSBuild 引数を削除
+  - `build/local.props` / `build/local.props.example` から `<TwitchClientSecret>` 行を削除
+  - `.github/workflows/ci.yml` (2 箇所) / `release.yml` (1 箇所) から `-p:TwitchClientSecret=...` を削除
+- `ClientId` をコードに直書きしないよう変更
   - `AppSettings` から `ClientId` プロパティを削除（settings.json への保存・読込を廃止）
   - `MainWindowViewModel` から `ClientId` フィールド・プロパティを削除
-  - `TwitchOAuthServer` のコンストラクタに `clientSecret` パラメータを追加
-  - 全箇所で `BuildSecrets.ClientId` / `BuildSecrets.ClientSecret` を使用するように変更
+  - 全箇所で `BuildSecrets.ClientId` を使用するように変更
 
 ### Fixed
-- `TwitchOAuthServer.RefreshTokenAsync()` にて `client_secret` が未送信だったバグを修正
 - `ToastNotificationViewModel.FontFamily` が `null` になり WPF バインディングエラーが発生するバグを修正（空文字のとき `new FontFamily()` を返すように変更）
+
+### Removed
+- `TwitchTokenExchange.cs` を削除（Authorization Code Flow の未使用残骸）
 
 ---
 
