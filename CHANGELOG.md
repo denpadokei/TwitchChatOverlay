@@ -25,11 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `ValidateSavedTokenAsync()`: 起動時更新の開始・成功をデバッグログ出力
 - ビルド時シークレット自動注入の仕組みを実装
   - `build/Generate-BuildSecrets.ps1` を新規追加
-  - ビルドプロパティ `TwitchClientId` / `TwitchClientSecret` を MSBuild ターゲット (`GenerateBuildSecrets`) でビルド前に受け取り、XOR 難読化した `BuildSecrets.g.cs` を `obj/` 以下に自動生成
+  - ビルドプロパティ `TwitchClientId` を MSBuild ターゲット (`GenerateBuildSecrets`) でビルド前に受け取り、XOR 難読化した `BuildSecrets.g.cs` を `obj/` 以下に自動生成
   - 生成ファイルは `obj/` 配下のため git には含まれない
 - GitHub Actions リリースワークフロー (`release.yml`) でのシークレット注入に対応
-  - リポジトリシークレット `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` を `dotnet publish` に `-p:` で渡す
-- ローカルデバッグ用シークレットファイル (`build/local.props`) のサポートを追加
+  - リポジトリシークレット `TWITCH_CLIENT_ID` を `dotnet publish` に `-p:` で渡す
+- ローカルデバッグ用クライアントID設定ファイル (`build/local.props`) のサポートを追加
   - `build/local.props.example` をテンプレートとして同梱（git 管理対象）
   - `build/local.props` は `.gitignore` に追加済み（git 管理対象外）
   - `local.props` が存在する場合のみ csproj に自動インポートされる
@@ -76,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 全箇所で `BuildSecrets.ClientId` を使用するように変更
 
 ### Fixed
-- `ToastNotificationViewModel.FontFamily` が `null` になり WPF バインディングエラーが発生するバグを修正（空文字のとき `new FontFamily()` を返すように変更）
+- `ToastNotificationViewModel.FontFamily` が `null` になり WPF バインディングエラーが発生するバグを修正（空文字のとき `SystemFonts.MessageFontFamily` を返すように変更）
 
 ### Removed
 - `TwitchTokenExchange.cs` を削除（Authorization Code Flow の未使用残骸）

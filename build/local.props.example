@@ -5,8 +5,8 @@
 
   使い方:
     1. このファイルを build\local.props にコピー
-    2. TwitchClientId と TwitchClientSecret に実際の値を入力
-    3. ビルド時に自動的に読み込まれ BuildSecrets.g.cs に反映されます
+    2. TwitchClientId に実際の値を入力
+    3. ビルド時に自動的に読み込まれ BuildSecrets.g.cs（BuildSecrets.ClientId）に反映されます
 -->
 <Project>
   <PropertyGroup>
