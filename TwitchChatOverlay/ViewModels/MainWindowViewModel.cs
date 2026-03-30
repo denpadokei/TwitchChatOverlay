@@ -645,7 +645,9 @@ namespace TwitchChatOverlay.ViewModels
                 _settingsService.SaveSettings(settings);
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-                TokenInfo = $"✅ {login}  |  取得日: {savedAt}";                LogService.Info($"OAuth認可完了: login={login}");                StatusMessage = $"✅ OAuth認可完了！ログイン: {login}";
+                TokenInfo = $"✅ {login}  |  取得日: {savedAt}";
+                LogService.Info($"OAuth認可完了: login={login}");
+                StatusMessage = $"✅ OAuth認可完了！ログイン: {login}";
             }
             catch (Exception ex)
             {
