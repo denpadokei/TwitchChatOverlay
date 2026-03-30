@@ -416,8 +416,12 @@ namespace TwitchChatOverlay.ViewModels
         {
             var settings = _settingsService.LoadSettings();
             if (string.IsNullOrEmpty(settings.RefreshToken))
+            {
+                LogService.Debug("[SilentRefresh] リフレッシュトークンがないためスキップ");
                 return;
+            }
 
+            LogService.Debug("[SilentRefresh] タイマーによるトークン更新を開始");
             try
             {
                 var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
@@ -431,13 +435,16 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                LogService.Debug($"[SilentRefresh] 更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
 
                 // 接続中であればトークンを更新して再接続
                 if (_eventSubService.IsConnected)
                 {
+                    LogService.Debug("[SilentRefresh] 接続中のため再接続を実行");
                     _eventSubService.Disconnect();
                     await Task.Delay(500);
                     await AutoConnectAsync();
+                    LogService.Debug("[SilentRefresh] 再接続完了");
                 }
             }
             catch (Exception ex)
@@ -478,6 +485,7 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                LogService.Debug($"[OnConnectionLost] トークン更新成功。再接続を開始 user={settings.OAuthTokenLogin ?? "(不明)"}");
 
                 await AutoConnectAsync();
             }
@@ -497,6 +505,7 @@ namespace TwitchChatOverlay.ViewModels
             // リフレッシュトークンがある場合は起動時に必ずトークンを更新する
             if (!string.IsNullOrEmpty(settings.RefreshToken))
             {
+                LogService.Debug("[Startup] 起動時トークン更新を開始");
                 try
                 {
                     TokenInfo = "🔄 トークンを更新中...";
@@ -511,6 +520,7 @@ namespace TwitchChatOverlay.ViewModels
 
                     string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                     TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                    LogService.Debug($"[Startup] 起動時トークン更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
                     await AutoConnectAsync();
                     return;
                 }
