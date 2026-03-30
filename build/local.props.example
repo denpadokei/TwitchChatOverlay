@@ -11,6 +11,5 @@
 <Project>
   <PropertyGroup>
     <TwitchClientId>your_client_id_here</TwitchClientId>
-    <TwitchClientSecret>your_client_secret_here</TwitchClientSecret>
   </PropertyGroup>
 </Project>
