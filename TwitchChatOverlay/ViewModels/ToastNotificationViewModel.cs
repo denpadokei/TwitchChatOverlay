@@ -52,7 +52,7 @@ namespace TwitchChatOverlay.ViewModels
             ThemeColorBrush = new SolidColorBrush(notification.ThemeColor);
 
             FontFamily = string.IsNullOrWhiteSpace(fontFamilyName)
-                ? new FontFamily()
+                ? SystemFonts.MessageFontFamily
                 : new FontFamily(fontFamilyName);
 
             (BackgroundBrush, TextForegroundBrush, SubTextForegroundBrush) =
