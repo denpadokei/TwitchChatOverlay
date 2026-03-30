@@ -62,7 +62,17 @@ namespace TwitchChatOverlay.Services
             if (!ShouldShow(notification.Type))
                 return;
 
-            Application.Current.Dispatcher.Invoke(() => ShowToast(notification));
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    ShowToast(notification);
+                }
+                catch (Exception ex)
+                {
+                    LogService.Error("トースト通知の表示中にエラーが発生しました", ex);
+                }
+            });
         }
 
         private bool ShouldShow(NotificationType type)

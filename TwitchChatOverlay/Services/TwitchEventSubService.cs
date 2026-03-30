@@ -34,6 +34,13 @@ namespace TwitchChatOverlay.Services
 
         public async Task ConnectAsync(string accessToken, string clientId, string broadcasterUserId, string userId)
         {
+            // 古いリソースを先にキャンセル・破棄してから新しい接続を開始する
+            _cts?.Cancel();
+            _cts?.Dispose();
+            _webSocket?.Dispose();
+            _webSocket = null;
+
+            LogService.Info($"WebSocket接続開始: broadcaster={broadcasterUserId}");
             _accessToken = accessToken;
             _clientId = clientId;
             _broadcasterUserId = broadcasterUserId;
@@ -45,33 +52,43 @@ namespace TwitchChatOverlay.Services
 
         public void Disconnect()
         {
+            LogService.Info("WebSocket切断要求");
             _cts?.Cancel();
             IsConnected = false;
         }
 
         private async Task ConnectWebSocketAsync(string url)
         {
+            LogService.Info($"WebSocket接続中: {url}");
+            var oldWebSocket = _webSocket;
             _webSocket = new ClientWebSocket();
+            oldWebSocket?.Dispose(); // 旧ソケットを破棄（reconnect時に古いインスタンスが残らないように）
             await _webSocket.ConnectAsync(new Uri(url), _cts.Token);
             IsConnected = true;
+            LogService.Info("WebSocket接続完了");
             _ = ReceiveLoopAsync();
         }
 
         private async Task ReceiveLoopAsync()
         {
+            // フィールドがConnectAsync呼び出しで差し替わっても影響を受けないようにローカルへキャプチャする
+            // これにより、古いループが新しいソケット/CTSを誤って参照することを防ぐ
+            var cancellationToken = _cts.Token;
+            var webSocket = _webSocket;
+
             var buffer = new byte[65536];
             var messageBuilder = new StringBuilder();
 
             try
             {
-                while (_webSocket.State == WebSocketState.Open && !_cts.IsCancellationRequested)
+                while (webSocket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
                 {
                     messageBuilder.Clear();
                     WebSocketReceiveResult result;
 
                     do
                     {
-                        result = await _webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), _cts.Token);
+                        result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken);
                         messageBuilder.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
                     } while (!result.EndOfMessage);
 
@@ -84,10 +101,12 @@ namespace TwitchChatOverlay.Services
             catch (OperationCanceledException)
             {
                 // 正常切断
+                LogService.Info("WebSocketループ正常終了（キャンセル）");
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // 予期しない切断 → ConnectionLost を通知
+                LogService.Error("WebSocket予期しない切断が発生しました", ex);
                 IsConnected = false;
                 ConnectionLost?.Invoke(this, EventArgs.Empty);
                 return;
@@ -98,8 +117,8 @@ namespace TwitchChatOverlay.Services
             }
 
             // ループが正常終了した場合（Close フレーム受信）でも、
-            // キャンセルによるものでなければ ConnectionLost を通知する
-            if (!_cts.IsCancellationRequested)
+            // キャプチャしたトークンで判定（フィールドのCTSが差し替わっても影響なし）
+            if (!cancellationToken.IsCancellationRequested)
                 ConnectionLost?.Invoke(this, EventArgs.Empty);
         }
 
@@ -133,9 +152,10 @@ namespace TwitchChatOverlay.Services
                         break;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // 個々のメッセージのパースエラーは無視
+                LogService.Warning("EventSubメッセージのパースエラー（無視）", ex);
             }
         }
 

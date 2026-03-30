@@ -11,6 +11,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.1] - 2026-03-30
+
+### Added
+- トークンリフレッシュ関連のデバッグログを充実
+  - `TwitchOAuthServer.RefreshTokenAsync()` に以下のログを追加
+    - リフレッシュ開始時: `refresh_token` の末尾4文字のみ表示
+    - HTTP レスポンス: ステータスコードと所要時間 (ms)
+    - 成功時: 新アクセストークンの末尾4文字と付与されたスコープ一覧
+    - 失敗時: エラー詳細
+  - `RefreshTokenSilentlyAsync()`: タイマー起動・成功 (ユーザー名)・再接続実行/完了をデバッグログ出力
+  - `OnConnectionLost()`: トークン更新成功・再接続開始をデバッグログ出力
+  - `ValidateSavedTokenAsync()`: 起動時更新の開始・成功をデバッグログ出力
+- ビルド時シークレット自動注入の仕組みを実装
+  - `build/Generate-BuildSecrets.ps1` を新規追加
+  - ビルドプロパティ `TwitchClientId` を MSBuild ターゲット (`GenerateBuildSecrets`) でビルド前に受け取り、XOR 難読化した `BuildSecrets.g.cs` を `obj/` 以下に自動生成
+  - 生成ファイルは `obj/` 配下のため git には含まれない
+- GitHub Actions リリースワークフロー (`release.yml`) でのシークレット注入に対応
+  - リポジトリシークレット `TWITCH_CLIENT_ID` を `dotnet publish` に `-p:` で渡す
+- ローカルデバッグ用クライアントID設定ファイル (`build/local.props`) のサポートを追加
+  - `build/local.props.example` をテンプレートとして同梱（git 管理対象）
+  - `build/local.props` は `.gitignore` に追加済み（git 管理対象外）
+  - `local.props` が存在する場合のみ csproj に自動インポートされる
+- CI ワークフロー (`ci.yml`) にアーティファクト保存を追加
+  - Release ビルドと Debug ビルドをそれぞれ publish し、アーティファクトとして保存
+  - `TwitchChatOverlay-win-x64-release` / `TwitchChatOverlay-win-x64-debug`
+- ログ機能を新規実装
+  - `Services/LogService.cs` を新規追加（外部ライブラリ不使用、.NET 標準機能のみ）
+  - ログ保存先: `%APPDATA%\TwitchChatOverlay\logs\TwitchChatOverlay_YYYY-MM-DD.log`（設定ファイルと同じ `TwitchChatOverlay` フォルダ配下）
+  - ログエントリに **時刻・ファイル名・行番号・メソッド名** を自動付与（`CallerFilePath` / `CallerLineNumber` / `CallerMemberName` 属性を使用）
+  - ログレベル: `Debug` / `Info` / `Warning` / `Error` の4段階
+  - `Exception` を渡すと型名・メッセージ・`InnerException`・スタックトレースを自動記録
+  - `ConcurrentQueue` + バックグラウンドタスクによる非同期書き込み（UIスレッドをブロックしない）
+  - 日次ログローテーション（日付が変わると新ファイルを自動作成）
+  - 起動時に30日超の古いログファイルを自動削除
+  - `MinLevel` プロパティでフィルタリングレベルを動的に変更可能
+  - `Flush()` / `Shutdown()` でアプリ終了時にキュー内の残ログを確実に書き出し
+- グローバル未処理例外ハンドラを `App.xaml.cs` に登録
+  - `Application.DispatcherUnhandledException`（UIスレッドの未捕捉例外）
+  - `AppDomain.CurrentDomain.UnhandledException`（致命的なバックグラウンド例外）
+  - `TaskScheduler.UnobservedTaskException`（非同期タスクの未観測例外）
+- 各サービス・ViewModel の既存エラー処理箇所に `LogService.Error()` / `LogService.Warning()` を追加
+  - `SettingsService`: 設定保存・読込エラー
+  - `TwitchApiService`: トークン検証ネットワークエラー
+  - `TwitchEventSubService`: 接続・切断イベント（Info）、予期しない切断（Error）、メッセージパースエラー（Warning）
+  - `TwitchOAuthServer`: ブラウザ起動失敗・JSONパースエラー
+  - `UpdateService`: アップデート検出・ダウンロード・インストール（Info）
+  - `ToastNotificationService`: トースト表示エラー
+  - `MainWindowViewModel`: 接続・切断・OAuth認可・設定保存・再接続の全エラーおよび成功イベント（Info）
+
+### Changed
+- **クライアントシークレット完全除去 — DCF パブリッククライアント化**
+  - Twitch の Device Code Grant Flow はパブリッククライアントとして動作可能なため、クライアントシークレットを不要とする構成に変更
+  - `TwitchOAuthServer` コンストラクタから `clientSecret` パラメータを削除
+  - `TwitchOAuthServer.RefreshTokenAsync()` のリクエストから `client_secret` フィールドを削除（パブリック DCF クライアントはシークレットなしでリフレッシュ可能）
+  - `MainWindowViewModel` 内の `new TwitchOAuthServer(...)` 呼び出し全箇所から `BuildSecrets.ClientSecret` を削除
+  - `build/Generate-BuildSecrets.ps1` から `ClientSecret` パラメータ・XOR エンコード処理・生成コードの `ClientSecret` プロパティを削除
+  - `TwitchChatOverlay.csproj` から `<TwitchClientSecret>` プロパティと `-ClientSecret` MSBuild 引数を削除
+  - `build/local.props` / `build/local.props.example` から `<TwitchClientSecret>` 行を削除
+  - `.github/workflows/ci.yml` (2 箇所) / `release.yml` (1 箇所) から `-p:TwitchClientSecret=...` を削除
+- `ClientId` をコードに直書きしないよう変更
+  - `AppSettings` から `ClientId` プロパティを削除（settings.json への保存・読込を廃止）
+  - `MainWindowViewModel` から `ClientId` フィールド・プロパティを削除
+  - 全箇所で `BuildSecrets.ClientId` を使用するように変更
+
+### Fixed
+- `ToastNotificationViewModel.FontFamily` が `null` になり WPF バインディングエラーが発生するバグを修正（空文字のとき `SystemFonts.MessageFontFamily` を返すように変更）
+
+### Removed
+- `TwitchTokenExchange.cs` を削除（Authorization Code Flow の未使用残骸）
+
+---
+
 ## [0.3.0] - 2026-03-29
 
 ### Added

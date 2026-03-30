@@ -27,3 +27,38 @@ jobs:
 
       - name: Build
         run: dotnet build TwitchChatOverlay/TwitchChatOverlay.csproj --configuration Release --no-restore
+
+      - name: Publish Release (self-contained, single file)
+        run: >
+          dotnet publish TwitchChatOverlay/TwitchChatOverlay.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:TwitchClientId=${{ secrets.TWITCH_CLIENT_ID }}
+          --output ./publish/release
+
+      - name: Publish Debug (self-contained, single file)
+        run: >
+          dotnet publish TwitchChatOverlay/TwitchChatOverlay.csproj
+          --configuration Debug
+          --runtime win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:TwitchClientId=${{ secrets.TWITCH_CLIENT_ID }}
+          --output ./publish/debug
+
+      - name: Upload Release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TwitchChatOverlay-win-x64-release
+          path: ./publish/release/
+
+      - name: Upload Debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TwitchChatOverlay-win-x64-debug
+          path: ./publish/debug/

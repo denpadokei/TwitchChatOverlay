@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,7 +15,6 @@ namespace TwitchChatOverlay.ViewModels
         private string _title = "Twitch Chat Overlay";
         private string _channelName;
         private string _oauthToken;
-        private string _clientId;
         private string _statusMessage = "未接続";
         private string _deviceUserCode;
         private bool _isAuthorizingOAuth;
@@ -104,12 +103,6 @@ namespace TwitchChatOverlay.ViewModels
         {
             get => _oauthToken;
             set => SetProperty(ref _oauthToken, value);
-        }
-
-        public string ClientId
-        {
-            get => _clientId;
-            set => SetProperty(ref _clientId, value);
         }
 
         /// <summary>Device Auth フロー中に表示するユーザーコード</summary>
@@ -367,8 +360,7 @@ namespace TwitchChatOverlay.ViewModels
         private async Task AutoConnectAsync()
         {
             if (string.IsNullOrWhiteSpace(ChannelName) ||
-                string.IsNullOrWhiteSpace(OAuthToken) ||
-                string.IsNullOrWhiteSpace(ClientId))
+                string.IsNullOrWhiteSpace(OAuthToken))
                 return;
 
             try
@@ -381,14 +373,16 @@ namespace TwitchChatOverlay.ViewModels
                 if (string.IsNullOrEmpty(broadcasterUserId) || string.IsNullOrEmpty(userId))
                     return;
 
-                await _eventSubService.ConnectAsync(OAuthToken, ClientId, broadcasterUserId, userId);
-                StatusMessage = $"✅ 接続完了 ({ChannelName})";
+                await _eventSubService.ConnectAsync(OAuthToken, BuildSecrets.ClientId, broadcasterUserId, userId);
+                LogService.Info($"EventSub自動接続完了: {ChannelName}");
+                StatusMessage = $"✅ 接続完了 ({ChannelName})"; 
                 StartTokenRefreshTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
             }
             catch (Exception ex)
             {
+                LogService.Error("自動接続エラー", ex);
                 StatusMessage = $"自動接続エラー: {ex.Message}";
             }
         }
@@ -397,12 +391,18 @@ namespace TwitchChatOverlay.ViewModels
         private void StartTokenRefreshTimer()
         {
             _tokenRefreshTimer?.Dispose();
+#if DEBUG
+            // デバッグ時は5分ごとにリフレッシュ（Twitch APIレート制限内で動作確認用）
+            var interval = TimeSpan.FromMinutes(5);
+#else
             // 3時間ごとに実行（アクセストークンは約4時間で期限切れ）
+            var interval = TimeSpan.FromHours(3);
+#endif
             _tokenRefreshTimer = new Timer(
                 _ => _ = RefreshTokenSilentlyAsync(),
                 null,
-                TimeSpan.FromHours(3),
-                TimeSpan.FromHours(3));
+                interval,
+                interval);
         }
 
         private void StopTokenRefreshTimer()
@@ -416,11 +416,15 @@ namespace TwitchChatOverlay.ViewModels
         {
             var settings = _settingsService.LoadSettings();
             if (string.IsNullOrEmpty(settings.RefreshToken))
+            {
+                LogService.Debug("[SilentRefresh] リフレッシュトークンがないためスキップ");
                 return;
+            }
 
+            LogService.Debug("[SilentRefresh] タイマーによるトークン更新を開始");
             try
             {
-                var oauthServer = new TwitchOAuthServer(ClientId);
+                var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
                 var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
                 OAuthToken = newToken.AccessToken;
@@ -431,18 +435,22 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                LogService.Debug($"[SilentRefresh] 更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
 
                 // 接続中であればトークンを更新して再接続
                 if (_eventSubService.IsConnected)
                 {
+                    LogService.Debug("[SilentRefresh] 接続中のため再接続を実行");
                     _eventSubService.Disconnect();
                     await Task.Delay(500);
                     await AutoConnectAsync();
+                    LogService.Debug("[SilentRefresh] 再接続完了");
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // サイレントなのでエラーは無視（切断イベントで再試行される）
+                // サイレントなのでUI表示はしない（切断イベントで再試行される）
+                LogService.Warning("トークンのサイレントリフレッシュに失敗しました", ex);
             }
         }
 
@@ -463,9 +471,10 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 StatusMessage = "🔄 接続が切断されました。トークンを更新して再接続中...";
+                LogService.Warning("予期しない切断が発生しました。トークン更新と再接続を試みます");
                 await Task.Delay(2000); // 少し待ってから再接続
 
-                var oauthServer = new TwitchOAuthServer(ClientId);
+                var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
                 var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
                 OAuthToken = newToken.AccessToken;
@@ -476,11 +485,13 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                LogService.Debug($"[OnConnectionLost] トークン更新成功。再接続を開始 user={settings.OAuthTokenLogin ?? "(不明)"}");
 
                 await AutoConnectAsync();
             }
             catch (Exception ex)
             {
+                LogService.Error("再接続エラー。再認可が必要です", ex);
                 StatusMessage = $"⚠️ 再接続失敗: {ex.Message}　再認可してください";
                 TokenInfo = "⚠️ トークンの更新に失敗しました。再認可してください";
                 OAuthToken = "";
@@ -489,6 +500,38 @@ namespace TwitchChatOverlay.ViewModels
 
         private async Task ValidateSavedTokenAsync()
         {
+            var settings = _settingsService.LoadSettings();
+
+            // リフレッシュトークンがある場合は起動時に必ずトークンを更新する
+            if (!string.IsNullOrEmpty(settings.RefreshToken))
+            {
+                LogService.Debug("[Startup] 起動時トークン更新を開始");
+                try
+                {
+                    TokenInfo = "🔄 トークンを更新中...";
+                    var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
+                    var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
+
+                    OAuthToken = newToken.AccessToken;
+                    settings.OAuthToken = newToken.AccessToken;
+                    settings.RefreshToken = newToken.RefreshToken;
+                    settings.OAuthTokenSavedAt = DateTime.UtcNow;
+                    _settingsService.SaveSettings(settings);
+
+                    string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                    TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                    LogService.Debug($"[Startup] 起動時トークン更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
+                    await AutoConnectAsync();
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // リフレッシュ失敗 → 既存トークンの検証にフォールバック
+                    LogService.Warning("起動時のトークン更新に失敗しました。既存トークンで接続を試みます", ex);
+                }
+            }
+
+            // リフレッシュトークンなし or 更新失敗 → 既存のアクセストークンを検証
             if (string.IsNullOrEmpty(OAuthToken))
             {
                 TokenInfo = null;
@@ -500,11 +543,10 @@ namespace TwitchChatOverlay.ViewModels
                 var (isValid, login, userId) = await _apiService.ValidateTokenAsync(OAuthToken);
                 if (isValid)
                 {
-                    var settings = _settingsService.LoadSettings();
                     string savedAt = settings.OAuthTokenSavedAt.HasValue
                         ? settings.OAuthTokenSavedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
                         : "不明";
-                    TokenInfo = $"✅ {login ?? settings.OAuthTokenLogin ?? "(不明)"}  |  取得日: {savedAt}";
+                    TokenInfo = $"✅ {login ?? settings.OAuthTokenLogin ?? "(不明)"}  |  取得日: {savedAt}";
 
                     // UserIdが未保存なら補完
                     if (!string.IsNullOrEmpty(userId) && string.IsNullOrEmpty(settings.UserId))
@@ -514,45 +556,18 @@ namespace TwitchChatOverlay.ViewModels
                         _settingsService.SaveSettings(settings);
                     }
 
-                    // トークン有効 → 自動接続
                     await AutoConnectAsync();
                 }
                 else
                 {
-                    // リフレッシュトークンで自動更新を試みる
-                    var settings = _settingsService.LoadSettings();
-                    if (!string.IsNullOrEmpty(settings.RefreshToken))
-                    {
-                        try
-                        {
-                            TokenInfo = "🔄 トークンを更新中...";
-                            var oauthServer = new TwitchOAuthServer(ClientId);
-                            var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
-
-                            OAuthToken = newToken.AccessToken;
-                            settings.OAuthToken = newToken.AccessToken;
-                            settings.RefreshToken = newToken.RefreshToken;
-                            settings.OAuthTokenSavedAt = DateTime.UtcNow;
-                            _settingsService.SaveSettings(settings);
-
-                            string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-                            TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                            await AutoConnectAsync();
-                            return;
-                        }
-                        catch
-                        {
-                            // リフレッシュ失敗 → 再認可を促す
-                        }
-                    }
-
                     TokenInfo = "⚠️ トークンの有効期限が切れました。再認可してください";
                     OAuthToken = "";
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // ネットワークエラーなどは無視
+                LogService.Warning("トークン検証中にエラーが発生しました（無視）", ex);
             }
         }
 
@@ -570,9 +585,10 @@ namespace TwitchChatOverlay.ViewModels
                     IsUpdateAvailable = true;
                 }
             }
-            catch
+            catch (Exception ex)
             {
                 // ネットワークエラーは無視（更新チェックは必須ではない）
+                LogService.Warning("アップデートチェック中にエラーが発生しました（無視）", ex);
             }
         }
 
@@ -598,6 +614,7 @@ namespace TwitchChatOverlay.ViewModels
             }
             catch (Exception ex)
             {
+                LogService.Error("アップデートの実行に失敗しました", ex);
                 StatusMessage = $"更新の失敗: {ex.Message}";
             }
             finally
@@ -609,19 +626,13 @@ namespace TwitchChatOverlay.ViewModels
 
         private async void AuthorizeOAuth()
         {
-            if (string.IsNullOrWhiteSpace(ClientId))
-            {
-                StatusMessage = "Client IDを入力してください";
-                return;
-            }
-
             try
             {
                 IsAuthorizingOAuth = true;
                 DeviceUserCode = "";
                 StatusMessage = "デバイス認可を開始中...";
 
-                var oauthServer = new TwitchOAuthServer(ClientId);
+                var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
                 var tokenResponse = await oauthServer.AuthorizeAsync((userCode, verUri) =>
                 {
                     DeviceUserCode = userCode;
@@ -632,24 +643,25 @@ namespace TwitchChatOverlay.ViewModels
                 DeviceUserCode = "";
 
                 StatusMessage = "ユーザー情報を取得中...";
-                var (userId, login) = await _apiService.GetCurrentUserAsync(OAuthToken, ClientId);
+                var (userId, login) = await _apiService.GetCurrentUserAsync(OAuthToken, BuildSecrets.ClientId);
 
                 var settings = _settingsService.LoadSettings();
                 settings.UserId = userId;
                 settings.BroadcasterUserId = userId;
                 settings.OAuthToken = OAuthToken;
                 settings.RefreshToken = tokenResponse.RefreshToken;
-                settings.ClientId = ClientId;
                 settings.OAuthTokenSavedAt = DateTime.UtcNow;
                 settings.OAuthTokenLogin = login;
                 _settingsService.SaveSettings(settings);
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {login}  |  取得日: {savedAt}";
+                LogService.Info($"OAuth認可完了: login={login}");
                 StatusMessage = $"✅ OAuth認可完了！ログイン: {login}";
             }
             catch (Exception ex)
             {
+                LogService.Error("OAuth認可エラー", ex);
                 StatusMessage = $"OAuth認可エラー: {ex.Message}";
                 DeviceUserCode = "";
             }
@@ -662,10 +674,9 @@ namespace TwitchChatOverlay.ViewModels
         private async void Connect()
         {
             if (string.IsNullOrWhiteSpace(ChannelName) ||
-                string.IsNullOrWhiteSpace(OAuthToken) ||
-                string.IsNullOrWhiteSpace(ClientId))
+                string.IsNullOrWhiteSpace(OAuthToken))
             {
-                StatusMessage = "チャンネル名、OAuthトークン、Client IDを入力してください";
+                StatusMessage = "チャンネル名とOAuthトークンを入力してください";
                 return;
             }
 
@@ -700,7 +711,8 @@ namespace TwitchChatOverlay.ViewModels
                     return;
                 }
 
-                await _eventSubService.ConnectAsync(OAuthToken, ClientId, broadcasterUserId, userId);
+                await _eventSubService.ConnectAsync(OAuthToken, BuildSecrets.ClientId, broadcasterUserId, userId);
+                LogService.Info($"EventSub接続完了: {ChannelName}");
                 StatusMessage = $"✅ 接続完了 ({ChannelName})";
                 StartTokenRefreshTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
@@ -708,12 +720,14 @@ namespace TwitchChatOverlay.ViewModels
             }
             catch (Exception ex)
             {
+                LogService.Error("EventSub接続エラー", ex);
                 StatusMessage = $"接続エラー: {ex.Message}";
             }
         }
 
         private void Disconnect()
         {
+            LogService.Info("EventSub切断要求");
             StopTokenRefreshTimer();
             _eventSubService.Disconnect();
             StatusMessage = "切断しました";
@@ -731,7 +745,6 @@ namespace TwitchChatOverlay.ViewModels
                 var settings = _settingsService.LoadSettings();
                 settings.ChannelName = ChannelName;
                 settings.OAuthToken = OAuthToken;
-                settings.ClientId = ClientId;
                 settings.ShowReward = ShowReward;
                 settings.ShowRaid = ShowRaid;
                 settings.ShowFollow = ShowFollow;
@@ -758,6 +771,7 @@ namespace TwitchChatOverlay.ViewModels
             }
             catch (Exception ex)
             {
+                LogService.Error("設定の保存に失敗しました", ex);
                 StatusMessage = $"設定の保存に失敗: {ex.Message}";
             }
         }
@@ -769,7 +783,6 @@ namespace TwitchChatOverlay.ViewModels
                 var settings = _settingsService.LoadSettings();
                 ChannelName = settings.ChannelName ?? "";
                 OAuthToken = settings.OAuthToken ?? "";
-                ClientId = settings.ClientId ?? "";
 
                 RecentChannels.Clear();
                 foreach (var ch in settings.RecentChannels)
@@ -803,6 +816,7 @@ namespace TwitchChatOverlay.ViewModels
             }
             catch (Exception ex)
             {
+                LogService.Error("設定の読み込みに失敗しました", ex);
                 StatusMessage = $"設定の読み込みに失敗: {ex.Message}";
             }
         }

@@ -45,6 +45,9 @@ namespace TwitchChatOverlay.Services
         /// </summary>
         public async Task<DeviceTokenResponse> RefreshTokenAsync(string refreshToken)
         {
+            var tokenHint = refreshToken?.Length > 4 ? $"****{refreshToken[^4..]}" : "****";
+            LogService.Debug($"[TokenRefresh] 開始 refresh_token={tokenHint}");
+
             var request = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("client_id", _clientId),
@@ -52,8 +55,11 @@ namespace TwitchChatOverlay.Services
                 new KeyValuePair<string, string>("refresh_token", refreshToken)
             });
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var response = await _http.PostAsync("https://id.twitch.tv/oauth2/token", request);
+            sw.Stop();
             var json = await response.Content.ReadAsStringAsync();
+            LogService.Debug($"[TokenRefresh] レスポンス StatusCode={(int)response.StatusCode} ({sw.ElapsedMilliseconds}ms)");
 
             if (!response.IsSuccessStatusCode)
             {
@@ -73,12 +79,21 @@ namespace TwitchChatOverlay.Services
                 catch (JsonException)
                 {
                     // 応答本文がJSONでない場合は、ステータスコードのみを使用する
+                    LogService.Warning("リフレッシュレスポンスがJSON形式でないため、エラー詳細を取得できませんでした");
                 }
 
+                LogService.Debug($"[TokenRefresh] 失敗: {baseMessage}");
                 throw new Exception(baseMessage);
             }
-            return JsonConvert.DeserializeObject<DeviceTokenResponse>(json)
+
+            var result = JsonConvert.DeserializeObject<DeviceTokenResponse>(json)
                 ?? throw new Exception("リフレッシュレスポンスの解析に失敗しました");
+
+            var newHint = result.AccessToken?.Length > 4 ? $"****{result.AccessToken[^4..]}" : "****";
+            var scopes = result.Scope != null ? string.Join(", ", result.Scope) : "(なし)";
+            LogService.Debug($"[TokenRefresh] 成功 new_access={newHint} scopes=[{scopes}]");
+
+            return result;
         }
 
         /// <summary>
@@ -129,7 +144,7 @@ namespace TwitchChatOverlay.Services
                     UseShellExecute = true
                 });
             }
-            catch { /* ブラウザが開けなくても継続 */ }
+            catch (Exception ex) { LogService.Warning("ブラウザを開けませんでした（継続）", ex); }
 
             // Step 2: トークンが発行されるまでポーリング
             var deadline = DateTime.UtcNow.AddSeconds(expiresIn);

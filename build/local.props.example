@@ -1,0 +1,15 @@
+<!--
+  ローカルデバッグ用シークレットファイルのテンプレートです。
+  このファイルをコピーして build\local.props として保存し、
+  実際の値を入力してください。local.props は .gitignore に含まれています。
+
+  使い方:
+    1. このファイルを build\local.props にコピー
+    2. TwitchClientId に実際の値を入力
+    3. ビルド時に自動的に読み込まれ BuildSecrets.g.cs（BuildSecrets.ClientId）に反映されます
+-->
+<Project>
+  <PropertyGroup>
+    <TwitchClientId>your_client_id_here</TwitchClientId>
+  </PropertyGroup>
+</Project>

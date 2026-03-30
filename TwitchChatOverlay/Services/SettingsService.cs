@@ -15,7 +15,6 @@ namespace TwitchChatOverlay.Services
         public string ChannelName { get; set; }
         public string OAuthToken { get; set; }
         public string RefreshToken { get; set; }
-        public string ClientId { get; set; } = "3rrjg8z3rs5ski5hwfubvgjayh0zu4";
         public string BroadcasterUserId { get; set; }
         public string UserId { get; set; }
         /// <summary>トークンを取得した日時（UTC）</summary>
@@ -100,6 +99,7 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception ex)
             {
+                LogService.Error("設定の保存に失敗しました", ex);
                 throw new Exception($"設定の保存に失敗しました: {ex.Message}", ex);
             }
         }
@@ -139,9 +139,6 @@ namespace TwitchChatOverlay.Services
                                 {
                                     string json = sr.ReadToEnd();
                                     var settings = JsonSerializer.Deserialize<AppSettings>(json);
-                                    // ClientIdが空の場合はデフォルト値を使用
-                                    if (string.IsNullOrEmpty(settings.ClientId))
-                                        settings.ClientId = "3rrjg8z3rs5ski5hwfubvgjayh0zu4";
                                     return settings;
                                 }
                             }
@@ -151,6 +148,7 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception ex)
             {
+                LogService.Error("設定の読み込みに失敗しました", ex);
                 throw new Exception($"設定の読み込みに失敗しました: {ex.Message}", ex);
             }
         }
