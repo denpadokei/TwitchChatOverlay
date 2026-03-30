@@ -36,6 +36,10 @@ namespace TwitchChatOverlay.Services
         private static bool _initialized;
         private static readonly object _initLock = new();
 
+        // Flush 同期用カウンタ: エンキュー済み件数と書き込み完了件数を追跡する
+        private static long _enqueueCount = 0;
+        private static long _writeCount   = 0;
+
         // ---------------------------------------------------------------
         // 公開プロパティ
         // ---------------------------------------------------------------
@@ -95,12 +99,19 @@ namespace TwitchChatOverlay.Services
             _writerTask?.Wait(TimeSpan.FromSeconds(5));
         }
 
-        /// <summary>キュー内のログが書き出されるまで待機します（同期）。</summary>
+        /// <summary>
+        /// キューに積まれたすべてのログが実際にファイルへ書き出されるまで待機します（同期）。
+        /// キューの空判定だけでなく、ライタースレッドの書き込み完了も確認するため、
+        /// デキュー済みだが未書き込みのエントリも確実に待機します。
+        /// </summary>
         public static void Flush()
         {
+            // Flush() 呼び出し時点のエンキュー済み件数を取得する。
+            // この時点以前にキューに積まれたすべてのエントリが書き出されるまで待つ。
+            long target = Interlocked.Read(ref _enqueueCount);
             var timeout = DateTime.Now.AddSeconds(5);
-            while (!_queue.IsEmpty && DateTime.Now < timeout)
-                Thread.Sleep(50);
+            while (Interlocked.Read(ref _writeCount) < target && DateTime.Now < timeout)
+                Thread.Sleep(10);
         }
 
         // ---------------------------------------------------------------
@@ -197,6 +208,7 @@ namespace TwitchChatOverlay.Services
 
             string logEntry = sb.ToString();
             _queue.Enqueue(logEntry);
+            Interlocked.Increment(ref _enqueueCount);
 #if DEBUG
             System.Diagnostics.Debug.WriteLine(logEntry);
 #endif
@@ -225,13 +237,17 @@ namespace TwitchChatOverlay.Services
 
                 if (_queue.IsEmpty) continue;
 
+                int batchCount = 0;
                 try
                 {
                     string logFilePath = GetCurrentLogFilePath();
                     var batchBuilder = new StringBuilder();
 
                     while (_queue.TryDequeue(out string entry))
+                    {
                         batchBuilder.AppendLine(entry);
+                        batchCount++;
+                    }
 
                     if (batchBuilder.Length > 0)
                         await File.AppendAllTextAsync(logFilePath, batchBuilder.ToString(), Encoding.UTF8);
@@ -239,6 +255,14 @@ namespace TwitchChatOverlay.Services
                 catch
                 {
                     // ログ書き込み失敗は無視（ログのために例外を発生させない）
+                }
+                finally
+                {
+                    // デキュー済みのエントリは書き込み成否にかかわらず処理済みとしてカウントする。
+                    // 書き込みに失敗した場合もエントリはキューから除去されているため、
+                    // この更新によって Flush() が不要にタイムアウトするのを防ぐ。
+                    if (batchCount > 0)
+                        Interlocked.Add(ref _writeCount, batchCount);
                 }
             }
         }
