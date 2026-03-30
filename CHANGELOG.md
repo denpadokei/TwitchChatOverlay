@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.1] - 2026-03-30
 
 ### Added
+- ビルド時シークレット自動注入の仕組みを実装
+  - `build/Generate-BuildSecrets.ps1` を新規追加
+  - ビルドプロパティ `TwitchClientId` / `TwitchClientSecret` を MSBuild ターゲット (`GenerateBuildSecrets`) でビルド前に受け取り、XOR 難読化した `BuildSecrets.g.cs` を `obj/` 以下に自動生成
+  - 生成ファイルは `obj/` 配下のため git には含まれない
+- GitHub Actions リリースワークフロー (`release.yml`) でのシークレット注入に対応
+  - リポジトリシークレット `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` を `dotnet publish` に `-p:` で渡す
+- ローカルデバッグ用シークレットファイル (`build/local.props`) のサポートを追加
+  - `build/local.props.example` をテンプレートとして同梱（git 管理対象）
+  - `build/local.props` は `.gitignore` に追加済み（git 管理対象外）
+  - `local.props` が存在する場合のみ csproj に自動インポートされる
+- CI ワークフロー (`ci.yml`) にアーティファクト保存を追加
+  - Release ビルドと Debug ビルドをそれぞれ publish し、アーティファクトとして保存
+  - `TwitchChatOverlay-win-x64-release` / `TwitchChatOverlay-win-x64-debug`
 - ログ機能を新規実装
   - `Services/LogService.cs` を新規追加（外部ライブラリ不使用、.NET 標準機能のみ）
   - ログ保存先: `%APPDATA%\TwitchChatOverlay\logs\TwitchChatOverlay_YYYY-MM-DD.log`（設定ファイルと同じ `TwitchChatOverlay` フォルダ配下）
@@ -38,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `UpdateService`: アップデート検出・ダウンロード・インストール（Info）
   - `ToastNotificationService`: トースト表示エラー
   - `MainWindowViewModel`: 接続・切断・OAuth認可・設定保存・再接続の全エラーおよび成功イベント（Info）
+
+### Changed
+- `ClientId` / `ClientSecret` をコードに直書きしないよう変更
+  - `AppSettings` から `ClientId` プロパティを削除（settings.json への保存・読込を廃止）
+  - `MainWindowViewModel` から `ClientId` フィールド・プロパティを削除
+  - `TwitchOAuthServer` のコンストラクタに `clientSecret` パラメータを追加
+  - 全箇所で `BuildSecrets.ClientId` / `BuildSecrets.ClientSecret` を使用するように変更
+
+### Fixed
+- `TwitchOAuthServer.RefreshTokenAsync()` にて `client_secret` が未送信だったバグを修正
+- `ToastNotificationViewModel.FontFamily` が `null` になり WPF バインディングエラーが発生するバグを修正（空文字のとき `new FontFamily()` を返すように変更）
 
 ---
 
