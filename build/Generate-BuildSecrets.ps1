@@ -1,17 +1,14 @@
 <#
 .SYNOPSIS
-    ビルド時にClientIdとClientSecretをXORエンコードしてC#ソースファイルを生成するスクリプト。
+    ビルド時にClientIdをXORエンコードしてC#ソースファイルを生成するスクリプト。
     生成されたファイルはgitには含まれず、ビルド時にのみ作成される。
 .PARAMETER ClientId
     TwitchのClientId
-.PARAMETER ClientSecret
-    TwitchのClientSecret
 .PARAMETER OutPath
     出力先ディレクトリ（通常はIntermediateOutputPath）
 #>
 param(
     [string]$ClientId = "",
-    [string]$ClientSecret = "",
     [string]$OutPath = "."
 )
 
@@ -41,12 +38,10 @@ function Format-ByteArrayLiteral([byte[]]$bytes) {
 }
 
 # XORエンコード
-$clientIdBytes  = ConvertTo-XorBytes $ClientId
-$clientSecBytes = ConvertTo-XorBytes $ClientSecret
+$clientIdBytes = ConvertTo-XorBytes $ClientId
 
 # C# リテラル生成
-$clientIdLiteral  = Format-ByteArrayLiteral $clientIdBytes
-$clientSecLiteral = Format-ByteArrayLiteral $clientSecBytes
+$clientIdLiteral = Format-ByteArrayLiteral $clientIdBytes
 
 # XORキーのC#リテラル
 $keyLiteral = Format-ByteArrayLiteral $key
@@ -81,8 +76,6 @@ namespace TwitchChatOverlay
         }
 
         internal static string ClientId => Dec($clientIdLiteral);
-
-        internal static string ClientSecret => Dec($clientSecLiteral);
     }
 }
 "@

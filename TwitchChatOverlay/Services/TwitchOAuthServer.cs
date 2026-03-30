@@ -24,7 +24,6 @@ namespace TwitchChatOverlay.Services
     public class TwitchOAuthServer
     {
         private readonly string _clientId;
-        private readonly string _clientSecret;
         private readonly string[] _scopes =
         {
             "user:read:chat",
@@ -36,10 +35,9 @@ namespace TwitchChatOverlay.Services
 
         private static readonly HttpClient _http = new();
 
-        public TwitchOAuthServer(string clientId, string clientSecret)
+        public TwitchOAuthServer(string clientId)
         {
             _clientId = clientId;
-            _clientSecret = clientSecret;
         }
 
         /// <summary>
@@ -50,7 +48,6 @@ namespace TwitchChatOverlay.Services
             var request = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("client_id", _clientId),
-                new KeyValuePair<string, string>("client_secret", _clientSecret),
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
                 new KeyValuePair<string, string>("refresh_token", refreshToken)
             });

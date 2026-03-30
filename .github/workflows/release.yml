@@ -42,7 +42,6 @@ jobs:
           -p:EnableCompressionInSingleFile=true
           -p:Version=${{ steps.version.outputs.VERSION }}
           -p:TwitchClientId=${{ secrets.TWITCH_CLIENT_ID }}
-          -p:TwitchClientSecret=${{ secrets.TWITCH_CLIENT_SECRET }}
           --output ./publish
 
       - name: Zip artifacts
