@@ -15,7 +15,6 @@ namespace TwitchChatOverlay.Services
         public string ChannelName { get; set; }
         public string OAuthToken { get; set; }
         public string RefreshToken { get; set; }
-        public string ClientId { get; set; } = BuildSecrets.ClientId;
         public string BroadcasterUserId { get; set; }
         public string UserId { get; set; }
         /// <summary>トークンを取得した日時（UTC）</summary>
@@ -140,9 +139,6 @@ namespace TwitchChatOverlay.Services
                                 {
                                     string json = sr.ReadToEnd();
                                     var settings = JsonSerializer.Deserialize<AppSettings>(json);
-                                    // ClientIdが空の場合はデフォルト値を使用
-                                    if (string.IsNullOrEmpty(settings.ClientId))
-                                        settings.ClientId = "3rrjg8z3rs5ski5hwfubvgjayh0zu4";
                                     return settings;
                                 }
                             }
