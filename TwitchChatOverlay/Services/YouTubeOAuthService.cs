@@ -41,6 +41,13 @@ namespace TwitchChatOverlay.Services
             "https://www.googleapis.com/auth/youtube.readonly"
         };
 
+        private readonly string _clientSecret;
+
+        public YouTubeOAuthService(string clientSecret = null)
+        {
+            _clientSecret = clientSecret;
+        }
+
         public async Task<YouTubeTokenResponse> AuthorizeAsync(string clientId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(clientId))
@@ -95,12 +102,16 @@ namespace TwitchChatOverlay.Services
             if (string.IsNullOrWhiteSpace(refreshToken))
                 throw new InvalidOperationException("YouTube refresh token が未設定です。");
 
-            var request = new FormUrlEncodedContent(new[]
+            var parameters = new List<KeyValuePair<string, string>>
             {
-                new KeyValuePair<string, string>("client_id", clientId),
-                new KeyValuePair<string, string>("grant_type", "refresh_token"),
-                new KeyValuePair<string, string>("refresh_token", refreshToken)
-            });
+                new("client_id", clientId),
+                new("grant_type", "refresh_token"),
+                new("refresh_token", refreshToken)
+            };
+            if (!string.IsNullOrWhiteSpace(_clientSecret))
+                parameters.Add(new("client_secret", _clientSecret));
+
+            var request = new FormUrlEncodedContent(parameters);
 
             var response = await Http.PostAsync(TokenEndpoint, request, cancellationToken);
             string json = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -137,14 +148,18 @@ namespace TwitchChatOverlay.Services
             string redirectUri,
             CancellationToken cancellationToken)
         {
-            var request = new FormUrlEncodedContent(new[]
+            var parameters = new List<KeyValuePair<string, string>>
             {
-                new KeyValuePair<string, string>("client_id", clientId),
-                new KeyValuePair<string, string>("code", code),
-                new KeyValuePair<string, string>("code_verifier", codeVerifier),
-                new KeyValuePair<string, string>("redirect_uri", redirectUri),
-                new KeyValuePair<string, string>("grant_type", "authorization_code")
-            });
+                new("client_id", clientId),
+                new("code", code),
+                new("code_verifier", codeVerifier),
+                new("redirect_uri", redirectUri),
+                new("grant_type", "authorization_code")
+            };
+            if (!string.IsNullOrWhiteSpace(_clientSecret))
+                parameters.Add(new("client_secret", _clientSecret));
+
+            var request = new FormUrlEncodedContent(parameters);
 
             var response = await Http.PostAsync(TokenEndpoint, request, cancellationToken);
             string json = await response.Content.ReadAsStringAsync(cancellationToken);

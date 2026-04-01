@@ -6,12 +6,15 @@
     TwitchのClientId
 .PARAMETER YouTubeClientId
     YouTube OAuthのClientId
+.PARAMETER YouTubeClientSecret
+    YouTube OAuthのClientSecret（デスクトップアプリの場合も必要、秘匿不要）
 .PARAMETER OutPath
     出力先ディレクトリ（通常はIntermediateOutputPath）
 #>
 param(
     [string]$ClientId = "",
     [string]$YouTubeClientId = "",
+    [string]$YouTubeClientSecret = "",
     [string]$OutPath = "."
 )
 
@@ -43,10 +46,12 @@ function Format-ByteArrayLiteral([byte[]]$bytes) {
 # XORエンコード
 $clientIdBytes = ConvertTo-XorBytes $ClientId
 $youtubeClientIdBytes = ConvertTo-XorBytes $YouTubeClientId
+$youtubeClientSecretBytes = ConvertTo-XorBytes $YouTubeClientSecret
 
 # C# リテラル生成
 $clientIdLiteral = Format-ByteArrayLiteral $clientIdBytes
 $youtubeClientIdLiteral = Format-ByteArrayLiteral $youtubeClientIdBytes
+$youtubeClientSecretLiteral = Format-ByteArrayLiteral $youtubeClientSecretBytes
 
 # XORキーのC#リテラル
 $keyLiteral = Format-ByteArrayLiteral $key
@@ -82,6 +87,7 @@ namespace TwitchChatOverlay
 
         internal static string ClientId => Dec($clientIdLiteral);
         internal static string YouTubeClientId => Dec($youtubeClientIdLiteral);
+        internal static string YouTubeClientSecret => Dec($youtubeClientSecretLiteral);
     }
 }
 "@

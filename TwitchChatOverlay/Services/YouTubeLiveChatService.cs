@@ -36,7 +36,9 @@ namespace TwitchChatOverlay.Services
 
         public event EventHandler<OverlayNotification> NotificationReceived;
         public event EventHandler<YouTubeConnectionLostEventArgs> ConnectionLost;
+        public event EventHandler BroadcastDetected;
         public bool IsConnected { get; private set; }
+        public bool IsWaitingForBroadcast { get; private set; }
 
         public async Task ConnectAsync(string accessToken, string channelName)
         {
@@ -50,7 +52,12 @@ namespace TwitchChatOverlay.Services
 
             _liveChatId = await ResolveLiveChatIdAsync(_cts.Token);
             if (string.IsNullOrWhiteSpace(_liveChatId))
-                throw new Exception("配信中の liveChatId を取得できませんでした。YouTube Live を開始してから再試行してください。");
+            {
+                IsWaitingForBroadcast = true;
+                LogService.Info("YouTube 配信が見つかりません。配信開始を待機します...");
+                _ = Task.Run(() => WaitForBroadcastLoopAsync(channelName, _cts.Token));
+                return;
+            }
 
             IsConnected = true;
             _ = Task.Run(() => PollLoopAsync(_cts.Token));
@@ -63,12 +70,58 @@ namespace TwitchChatOverlay.Services
             _cts?.Dispose();
             _cts = null;
             IsConnected = false;
+            IsWaitingForBroadcast = false;
+        }
+
+        private async Task WaitForBroadcastLoopAsync(string channelName, CancellationToken cancellationToken)
+        {
+            const int pollIntervalMs = 30_000;
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(pollIntervalMs, cancellationToken);
+                    _liveChatId = await ResolveLiveChatIdAsync(cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(_liveChatId))
+                    {
+                        IsWaitingForBroadcast = false;
+                        IsConnected = true;
+                        LogService.Info($"YouTube 配信を検出しました: liveChatId={_liveChatId}, channel={channelName}");
+                        BroadcastDetected?.Invoke(this, EventArgs.Empty);
+                        await PollLoopAsync(cancellationToken);
+                        return;
+                    }
+                    LogService.Info("YouTube 配信中のブロードキャストが見つかりません。再試行します...");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                LogService.Info("YouTube 配信待機終了（キャンセル）");
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("YouTube 配信待機エラー", ex);
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    ConnectionLost?.Invoke(this, new YouTubeConnectionLostEventArgs
+                    {
+                        IsUnauthorized = ex is YouTubeApiException apiEx && apiEx.StatusCode == 401,
+                        Message = ex.Message
+                    });
+                }
+            }
+            finally
+            {
+                IsWaitingForBroadcast = false;
+            }
         }
 
         private async Task<string> ResolveLiveChatIdAsync(CancellationToken cancellationToken)
         {
+            // mine と broadcastStatus は同時指定不可。mine=true で自分の配信を全取得し、
+            // lifeCycleStatus が live / liveStarting のものを選択する。
             string url = "https://www.googleapis.com/youtube/v3/liveBroadcasts" +
-                         "?part=snippet&broadcastStatus=active&mine=true&maxResults=1";
+                         "?part=snippet,status&mine=true&maxResults=10";
 
             var req = new HttpRequestMessage(HttpMethod.Get, url);
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
@@ -78,7 +131,21 @@ namespace TwitchChatOverlay.Services
                 throw new YouTubeApiException((int)res.StatusCode, $"YouTube liveBroadcasts 取得失敗: {(int)res.StatusCode} {json}");
 
             var obj = JObject.Parse(json);
-            return obj["items"]?[0]?["snippet"]?["liveChatId"]?.ToString();
+            if (obj["items"] is not JArray items)
+                return null;
+
+            foreach (var item in items)
+            {
+                string status = item["status"]?["lifeCycleStatus"]?.ToString();
+                if (status is "live" or "liveStarting")
+                {
+                    string liveChatId = item["snippet"]?["liveChatId"]?.ToString();
+                    if (!string.IsNullOrEmpty(liveChatId))
+                        return liveChatId;
+                }
+            }
+
+            return null;
         }
 
         private async Task PollLoopAsync(CancellationToken cancellationToken)
