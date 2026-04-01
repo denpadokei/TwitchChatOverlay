@@ -48,7 +48,6 @@ namespace TwitchChatOverlay.ViewModels
         private bool _showYouTubeChat = true;
         private bool _showYouTubeSuperChat = true;
         private bool _showYouTubeMembership = true;
-        private string _youTubeChannelName = "";
         private string _youTubeTokenInfo = "未認可";
         private string _youTubeStatusMessage = "未接続";
         private bool _regionsInitialized;
@@ -352,12 +351,6 @@ namespace TwitchChatOverlay.ViewModels
             set => SetProperty(ref _showYouTubeMembership, value);
         }
 
-        public string YouTubeChannelName
-        {
-            get => _youTubeChannelName;
-            set => SetProperty(ref _youTubeChannelName, value);
-        }
-
         public string YouTubeTokenInfo
         {
             get => _youTubeTokenInfo;
@@ -428,7 +421,6 @@ namespace TwitchChatOverlay.ViewModels
         private async Task AutoConnectYouTubeAsync()
         {
             var settings = _settingsService.LoadSettings();
-            YouTubeChannelName = settings.YouTubeChannelName ?? YouTubeChannelName;
 
             if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
             {
@@ -441,7 +433,7 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 YouTubeStatusMessage = "YouTube自動接続中...";
-                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                     : "✅ YouTube自動接続完了";
@@ -463,7 +455,7 @@ namespace TwitchChatOverlay.ViewModels
                     _settingsService.SaveSettings(settings);
 
                     YouTubeTokenInfo = settings.YouTubeTokenInfo;
-                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
                     YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                         ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                         : "✅ YouTube自動接続完了";
@@ -876,7 +868,6 @@ namespace TwitchChatOverlay.ViewModels
                 settings.SelectedTabIndex = SelectedTabIndex;
                 settings.ChannelName = ChannelName;
                 settings.OAuthToken = OAuthToken;
-                settings.YouTubeChannelName = YouTubeChannelName;
                 settings.YouTubeTokenInfo = YouTubeTokenInfo;
                 settings.ShowReward = ShowReward;
                 settings.ShowRaid = ShowRaid;
@@ -920,7 +911,6 @@ namespace TwitchChatOverlay.ViewModels
                 SelectedTabIndex = settings.SelectedTabIndex;
                 ChannelName = settings.ChannelName ?? "";
                 OAuthToken = settings.OAuthToken ?? "";
-                YouTubeChannelName = settings.YouTubeChannelName ?? "";
                 YouTubeTokenInfo = string.IsNullOrEmpty(settings.YouTubeTokenInfo) ? "未認可" : settings.YouTubeTokenInfo;
 
                 RecentChannels.Clear();
@@ -998,12 +988,10 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 YouTubeStatusMessage = "YouTube Live Chat に接続中...";
-                settings.YouTubeChannelName = YouTubeChannelName;
-                _settingsService.SaveSettings(settings);
 
                 try
                 {
-                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
                 }
                 catch (Exception ex) when (IsYouTubeUnauthorized(ex))
                 {
@@ -1017,7 +1005,7 @@ namespace TwitchChatOverlay.ViewModels
                     _settingsService.SaveSettings(settings);
 
                     YouTubeTokenInfo = settings.YouTubeTokenInfo;
-                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
                 }
 
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
@@ -1063,7 +1051,7 @@ namespace TwitchChatOverlay.ViewModels
                 }
 
                 YouTubeStatusMessage = "YouTube再接続中...";
-                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                     : "✅ YouTube再接続完了";

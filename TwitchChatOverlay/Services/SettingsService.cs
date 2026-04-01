@@ -16,7 +16,6 @@ namespace TwitchChatOverlay.Services
         public string ChannelName { get; set; }
         public string OAuthToken { get; set; }
         public string RefreshToken { get; set; }
-        public string YouTubeChannelName { get; set; }
         public string YouTubeOAuthToken { get; set; }
         public string YouTubeRefreshToken { get; set; }
         public string YouTubeTokenInfo { get; set; }
@@ -140,7 +139,7 @@ namespace TwitchChatOverlay.Services
                     {
                         _cachedSettings = CloneSettings(defaults);
                     }
-                    return defaults;
+                    return CloneSettings(defaults);
                 }
 
                 byte[] encryptedData = File.ReadAllBytes(_settingsPath);
@@ -170,7 +169,7 @@ namespace TwitchChatOverlay.Services
                                     {
                                         _cachedSettings = CloneSettings(settings);
                                     }
-                                    return settings;
+                                    return CloneSettings(settings);
                                 }
                             }
                         }

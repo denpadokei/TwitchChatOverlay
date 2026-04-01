@@ -73,7 +73,10 @@ namespace TwitchChatOverlay.Services
             var contextTask = listener.GetContextAsync();
             var completed = await Task.WhenAny(contextTask, Task.Delay(TimeSpan.FromMinutes(3), cancellationToken));
             if (completed != contextTask)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 throw new TimeoutException("YouTube OAuth のコールバック待機がタイムアウトしました。");
+            }
 
             var context = await contextTask;
             string code = context.Request.QueryString["code"];

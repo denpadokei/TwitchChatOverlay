@@ -40,7 +40,7 @@ namespace TwitchChatOverlay.Services
         public bool IsConnected { get; private set; }
         public bool IsWaitingForBroadcast { get; private set; }
 
-        public async Task ConnectAsync(string accessToken, string channelName)
+        public async Task ConnectAsync(string accessToken)
         {
             if (string.IsNullOrWhiteSpace(accessToken))
                 throw new InvalidOperationException("YouTube OAuth token がありません。");
@@ -55,13 +55,13 @@ namespace TwitchChatOverlay.Services
             {
                 IsWaitingForBroadcast = true;
                 LogService.Info("YouTube 配信が見つかりません。配信開始を待機します...");
-                _ = Task.Run(() => WaitForBroadcastLoopAsync(channelName, _cts.Token));
+                _ = Task.Run(() => WaitForBroadcastLoopAsync(_cts.Token));
                 return;
             }
 
             IsConnected = true;
             _ = Task.Run(() => PollLoopAsync(_cts.Token));
-            LogService.Info($"YouTube Live Chat 接続開始: liveChatId={_liveChatId}, channel={channelName}");
+            LogService.Info($"YouTube Live Chat 接続開始: liveChatId={_liveChatId}");
         }
 
         public void Disconnect()
@@ -73,7 +73,7 @@ namespace TwitchChatOverlay.Services
             IsWaitingForBroadcast = false;
         }
 
-        private async Task WaitForBroadcastLoopAsync(string channelName, CancellationToken cancellationToken)
+        private async Task WaitForBroadcastLoopAsync(CancellationToken cancellationToken)
         {
             const int pollIntervalMs = 30_000;
             try
@@ -86,7 +86,7 @@ namespace TwitchChatOverlay.Services
                     {
                         IsWaitingForBroadcast = false;
                         IsConnected = true;
-                        LogService.Info($"YouTube 配信を検出しました: liveChatId={_liveChatId}, channel={channelName}");
+                        LogService.Info($"YouTube 配信を検出しました: liveChatId={_liveChatId}");
                         BroadcastDetected?.Invoke(this, EventArgs.Empty);
                         await PollLoopAsync(cancellationToken);
                         return;

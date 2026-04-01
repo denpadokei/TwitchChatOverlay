@@ -38,15 +38,6 @@
                        Margin="0,0,0,8"
                        Foreground="#FF3B30"/>
 
-            <TextBlock Text="チャンネルID / ハンドル"
-                       Margin="0,0,0,4"
-                       Foreground="{StaticResource TextPrimaryBrush}"
-                       FontSize="12"/>
-            <TextBox Text="{Binding YouTubeChannelName, UpdateSourceTrigger=PropertyChanged}"
-                     Style="{StaticResource StandardTextBoxStyle}"
-                     Margin="0,0,0,6"
-                     ToolTip="例: @your-channel or UCxxxxxxxx"/>
-
             <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
                 <Button Content="▶ 接続"
                         Command="{Binding ConnectYouTubeCommand}"
