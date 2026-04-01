@@ -423,6 +423,12 @@ namespace TwitchChatOverlay.ViewModels
         {
             var settings = _settingsService.LoadSettings();
 
+            if (!settings.YouTubeAutoConnectEnabled)
+            {
+                YouTubeStatusMessage = "未接続";
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
             {
                 if (!string.IsNullOrEmpty(settings.YouTubeTokenInfo))
@@ -438,6 +444,9 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                     : "✅ YouTube自動接続完了";
+
+                settings.YouTubeAutoConnectEnabled = true;
+                _settingsService.SaveSettings(settings);
             }
             catch
             {
@@ -460,6 +469,9 @@ namespace TwitchChatOverlay.ViewModels
                     YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                         ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                         : "✅ YouTube自動接続完了";
+
+                    settings.YouTubeAutoConnectEnabled = true;
+                    _settingsService.SaveSettings(settings);
                 }
                 catch (Exception ex)
                 {
@@ -1085,6 +1097,11 @@ namespace TwitchChatOverlay.ViewModels
         {
             StopYouTubeTokenRefreshTimer();
             _youTubeLiveChatService.Disconnect();
+
+            var settings = _settingsService.LoadSettings();
+            settings.YouTubeAutoConnectEnabled = false;
+            _settingsService.SaveSettings(settings);
+
             YouTubeStatusMessage = "YouTube接続を切断しました";
         }
 
