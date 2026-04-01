@@ -4,6 +4,7 @@ using System.Windows;
 using Prism.Ioc;
 using TwitchChatOverlay.Services;
 using TwitchChatOverlay.Views;
+using TwitchChatOverlay.Views.Tabs;
 
 namespace TwitchChatOverlay
 {
@@ -63,6 +64,12 @@ namespace TwitchChatOverlay
             containerRegistry.RegisterSingleton<TwitchEventSubService>();
             containerRegistry.RegisterSingleton<ToastNotificationService>();
             containerRegistry.RegisterSingleton<UpdateService>();
+            containerRegistry.RegisterSingleton<YouTubeOAuthService>();
+            containerRegistry.RegisterSingleton<YouTubeLiveChatService>();
+
+            containerRegistry.RegisterForNavigation<CommonSettingsTabView>();
+            containerRegistry.RegisterForNavigation<TwitchSettingsTabView>();
+            containerRegistry.RegisterForNavigation<YouTubeSettingsTabView>();
         }
     }
 }

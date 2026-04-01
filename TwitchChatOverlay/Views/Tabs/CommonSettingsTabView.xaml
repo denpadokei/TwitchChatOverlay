@@ -1,0 +1,171 @@
+<UserControl x:Class="TwitchChatOverlay.Views.Tabs.CommonSettingsTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="12,12,12,12">
+            <TextBlock Text="共通設定"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       Margin="0,0,0,16"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+
+            <TextBlock Text="⏱ トースト設定"
+                       FontSize="13"
+                       FontWeight="Bold"
+                       Margin="0,0,0,10"
+                       Foreground="{StaticResource TwitchPurpleBrush}"/>
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="28"/>
+                    <ColumnDefinition Width="20"/>
+                    <ColumnDefinition Width="80"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="28"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="表示時間 (秒)" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <Slider Grid.Column="1" Minimum="1" Maximum="30" Value="{Binding ToastDurationSeconds}" VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="1"/>
+                <TextBlock Grid.Column="2" Text="{Binding ToastDurationSeconds}" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="4,0,0,0"/>
+                <TextBlock Grid.Column="4" Text="最大同時表示" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <Slider Grid.Column="5" Minimum="1" Maximum="10" Value="{Binding ToastMaxCount}" VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="1"/>
+                <TextBlock Grid.Column="6" Text="{Binding ToastMaxCount}" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="12" Margin="4,0,0,0"/>
+            </Grid>
+
+            <Grid Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="表示位置" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <ComboBox Grid.Column="1" SelectedIndex="{Binding ToastPositionIndex}" Height="28" FontSize="12">
+                    <ComboBoxItem Content="右上"/>
+                    <ComboBoxItem Content="左上"/>
+                    <ComboBoxItem Content="右下"/>
+                    <ComboBoxItem Content="左下"/>
+                </ComboBox>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="モニター" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding MonitorList}" SelectedIndex="{Binding ToastMonitorIndex}" Height="28" FontSize="12"/>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="50"/>
+                    <ColumnDefinition Width="20"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="文字サイズ" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <Slider Grid.Column="1" Minimum="8" Maximum="24" Value="{Binding ToastFontSize}" VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="1"/>
+                <TextBox Grid.Column="2" Text="{Binding ToastFontSize, StringFormat={}{0:F0}, UpdateSourceTrigger=LostFocus}" Height="24" Margin="4,0,0,0" VerticalContentAlignment="Center" TextAlignment="Right" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="pt" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="2,0,0,0"/>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="50"/>
+                    <ColumnDefinition Width="20"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="横幅" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <Slider Grid.Column="1" Minimum="200" Maximum="600" Value="{Binding ToastWidth}" VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="20"/>
+                <TextBox Grid.Column="2" Text="{Binding ToastWidth, StringFormat={}{0:F0}, UpdateSourceTrigger=LostFocus}" Height="24" Margin="4,0,0,0" VerticalContentAlignment="Center" TextAlignment="Right" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="px" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="2,0,0,0"/>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="50"/>
+                    <ColumnDefinition Width="20"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="背景の濃さ" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding ToastBackgroundOpacityPercent}" VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="5"/>
+                <TextBox Grid.Column="2" Text="{Binding ToastBackgroundOpacityPercent, UpdateSourceTrigger=LostFocus}" Height="24" Margin="4,0,0,0" VerticalContentAlignment="Center" TextAlignment="Right" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="%" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="2,0,0,0"/>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="フォント" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <ComboBox Grid.Column="1" IsEditable="True" Text="{Binding ToastFontFamily, UpdateSourceTrigger=LostFocus}" ItemsSource="{Binding FontFamilyPresets}" Height="28" FontSize="12"/>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="背景色" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <ComboBox Grid.Column="1" SelectedIndex="{Binding ToastBackgroundModeIndex}" Height="28" FontSize="12">
+                    <ComboBoxItem Content="ダーク"/>
+                    <ComboBoxItem Content="ライト"/>
+                    <ComboBoxItem Content="システム設定"/>
+                    <ComboBoxItem Content="カスタム"/>
+                </ComboBox>
+            </Grid>
+
+            <Grid Margin="0,6,0,0" Visibility="{Binding IsCustomBackgroundColor, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text=""/>
+                <TextBox Grid.Column="1" Text="{Binding ToastCustomBackgroundColor, UpdateSourceTrigger=LostFocus}" Height="28" VerticalContentAlignment="Center" FontSize="12" FontFamily="Consolas" ToolTip="#RRGGBB 形式で入力 (例: #1A1A2E)"/>
+                <TextBlock Grid.Column="2" Text="  HEX (#RRGGBB)" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="文字色" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <ComboBox Grid.Column="1" SelectedIndex="{Binding ToastFontColorModeIndex}" Height="28" FontSize="12">
+                    <ComboBoxItem Content="自動（背景色に合わせる）"/>
+                    <ComboBoxItem Content="カスタム"/>
+                </ComboBox>
+            </Grid>
+
+            <Grid Margin="0,6,0,0" Visibility="{Binding IsCustomFontColor, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="60"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text=""/>
+                <TextBox Grid.Column="1" Text="{Binding ToastCustomFontColor, UpdateSourceTrigger=LostFocus}" Height="28" VerticalContentAlignment="Center" FontSize="12" FontFamily="Consolas" ToolTip="#RRGGBB 形式で入力 (例: #FFFFFF)"/>
+                <TextBlock Grid.Column="2" Text="  HEX (#RRGGBB)" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
+            </Grid>
+
+            <Separator Margin="0,14,0,12" Background="{StaticResource BorderBrush}"/>
+
+            <Button Content="💾 設定を保存"
+                    Command="{Binding SaveSettingsCommand}"
+                    Width="130" Height="36"
+                    HorizontalAlignment="Left"
+                    Style="{StaticResource SuccessButtonStyle}"
+                    Margin="0,0,0,12"/>
+
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       FontSize="12"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

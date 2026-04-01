@@ -1,0 +1,85 @@
+<UserControl x:Class="TwitchChatOverlay.Views.Tabs.YouTubeSettingsTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="12,12,12,12" VerticalAlignment="Top">
+            <TextBlock Text="YouTube 設定"
+                       FontSize="18" FontWeight="Bold"
+                       Margin="0,0,0,16"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+
+            <TextBlock Text="🔴 YouTube 認可"
+                       FontSize="13" FontWeight="Bold"
+                       Margin="0,0,0,8"
+                       Foreground="#FF3B30"/>
+
+            <Border Background="#2A1A1A"
+                    BorderBrush="#FF3B30"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="12,8"
+                    Margin="0,0,0,8">
+                <TextBlock Text="{Binding YouTubeTokenInfo}"
+                           Foreground="#CCCCCC"
+                           FontSize="12"/>
+            </Border>
+
+            <Button Content="🌐 YouTubeで認可する"
+                    Command="{Binding AuthorizeYouTubeOAuthCommand}"
+                    Height="38"
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    Margin="0,0,0,8"/>
+
+            <Separator Margin="0,12,0,12" Background="{StaticResource BorderBrush}"/>
+
+            <TextBlock Text="📡 接続"
+                       FontSize="13" FontWeight="Bold"
+                       Margin="0,0,0,8"
+                       Foreground="#FF3B30"/>
+
+            <TextBlock Text="チャンネルID / ハンドル"
+                       Margin="0,0,0,4"
+                       Foreground="{StaticResource TextPrimaryBrush}"
+                       FontSize="12"/>
+            <TextBox Text="{Binding YouTubeChannelName, UpdateSourceTrigger=PropertyChanged}"
+                     Style="{StaticResource StandardTextBoxStyle}"
+                     Margin="0,0,0,6"
+                     ToolTip="例: @your-channel or UCxxxxxxxx"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                <Button Content="▶ 接続"
+                        Command="{Binding ConnectYouTubeCommand}"
+                        Width="90" Height="36"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Margin="0,0,8,0"/>
+                <Button Content="⏹ 切断"
+                        Command="{Binding DisconnectYouTubeCommand}"
+                        Width="90" Height="36"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+            </StackPanel>
+
+            <Separator Margin="0,16,0,12" Background="{StaticResource BorderBrush}"/>
+
+            <TextBlock Text="🔔 通知設定"
+                       FontSize="13" FontWeight="Bold"
+                       Margin="0,0,0,10"
+                       Foreground="#FF3B30"/>
+
+            <WrapPanel Margin="0,0,0,4">
+                <CheckBox Content="💬 コメント" IsChecked="{Binding ShowYouTubeChat}"
+                          Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,16,8"/>
+                <CheckBox Content="💸 Super Chat" IsChecked="{Binding ShowYouTubeSuperChat}"
+                          Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,16,8"/>
+                <CheckBox Content="🌟 メンバーシップ" IsChecked="{Binding ShowYouTubeMembership}"
+                          Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,16,8"/>
+            </WrapPanel>
+
+            <TextBlock Text="{Binding YouTubeStatusMessage}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       Margin="0,8,0,0"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

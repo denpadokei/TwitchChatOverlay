@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using System.Windows.Input;
 using Prism.Commands;
 using Prism.Mvvm;
+using Prism.Regions;
+using TwitchChatOverlay.Infrastructure;
 using TwitchChatOverlay.Services;
 using WinForms = System.Windows.Forms;
 
@@ -41,6 +43,14 @@ namespace TwitchChatOverlay.ViewModels
         private string _toastCustomBackgroundColor = "#1A1A2E";
         private int _toastFontColorModeIndex = 0;
         private string _toastCustomFontColor = "#FFFFFF";
+        private int _selectedTabIndex;
+        private bool _showYouTubeChat = true;
+        private bool _showYouTubeSuperChat = true;
+        private bool _showYouTubeMembership = true;
+        private string _youTubeChannelName = "";
+        private string _youTubeTokenInfo = "未認可";
+        private string _youTubeStatusMessage = "未接続";
+        private bool _regionsInitialized;
 
         public ObservableCollection<string> MonitorList { get; } = new();
 
@@ -85,6 +95,8 @@ namespace TwitchChatOverlay.ViewModels
         private readonly ToastNotificationService _toastService;
         private readonly SettingsService _settingsService;
         private readonly UpdateService _updateService;
+        private readonly YouTubeOAuthService _youTubeOAuthService;
+        private readonly YouTubeLiveChatService _youTubeLiveChatService;
         private Timer _tokenRefreshTimer;
 
         public string Title
@@ -311,19 +323,68 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand SelectRecentChannelCommand { get; }
         public ICommand UpdateCommand { get; }
         public ICommand OpenReleasePageCommand { get; }
+        public ICommand AuthorizeYouTubeOAuthCommand { get; }
+        public ICommand ConnectYouTubeCommand { get; }
+        public ICommand DisconnectYouTubeCommand { get; }
+
+        public int SelectedTabIndex
+        {
+            get => _selectedTabIndex;
+            set => SetProperty(ref _selectedTabIndex, value);
+        }
+
+        public bool ShowYouTubeChat
+        {
+            get => _showYouTubeChat;
+            set => SetProperty(ref _showYouTubeChat, value);
+        }
+
+        public bool ShowYouTubeSuperChat
+        {
+            get => _showYouTubeSuperChat;
+            set => SetProperty(ref _showYouTubeSuperChat, value);
+        }
+
+        public bool ShowYouTubeMembership
+        {
+            get => _showYouTubeMembership;
+            set => SetProperty(ref _showYouTubeMembership, value);
+        }
+
+        public string YouTubeChannelName
+        {
+            get => _youTubeChannelName;
+            set => SetProperty(ref _youTubeChannelName, value);
+        }
+
+        public string YouTubeTokenInfo
+        {
+            get => _youTubeTokenInfo;
+            set => SetProperty(ref _youTubeTokenInfo, value);
+        }
+
+        public string YouTubeStatusMessage
+        {
+            get => _youTubeStatusMessage;
+            set => SetProperty(ref _youTubeStatusMessage, value);
+        }
 
         public MainWindowViewModel(
             SettingsService settingsService,
             TwitchApiService apiService,
             TwitchEventSubService eventSubService,
             ToastNotificationService toastService,
-            UpdateService updateService)
+            UpdateService updateService,
+            YouTubeOAuthService youTubeOAuthService,
+            YouTubeLiveChatService youTubeLiveChatService)
         {
             _settingsService = settingsService;
             _apiService = apiService;
             _eventSubService = eventSubService;
             _toastService = toastService;
             _updateService = updateService;
+            _youTubeOAuthService = youTubeOAuthService;
+            _youTubeLiveChatService = youTubeLiveChatService;
 
             ConnectCommand = new DelegateCommand(Connect, CanConnect);
             DisconnectCommand = new DelegateCommand(Disconnect, CanDisconnect);
@@ -337,11 +398,15 @@ namespace TwitchChatOverlay.ViewModels
                 () => _updateService.OpenReleasePage(_updateReleasePageUrl),
                 () => !string.IsNullOrEmpty(_updateReleasePageUrl))
                 .ObservesProperty(() => IsUpdateAvailable);
+            AuthorizeYouTubeOAuthCommand = new DelegateCommand(AuthorizeYouTubeOAuth);
+            ConnectYouTubeCommand = new DelegateCommand(ConnectYouTube);
+            DisconnectYouTubeCommand = new DelegateCommand(DisconnectYouTube);
 
-            _toastService.Initialize(_eventSubService);
+            _toastService.Initialize(_eventSubService, _youTubeLiveChatService);
 
             // 予期しない切断（トークン期限切れ等）時に自動再接続
             _eventSubService.ConnectionLost += OnConnectionLost;
+            _youTubeLiveChatService.ConnectionLost += OnYouTubeConnectionLost;
 
             // モニター一覧を構築
             var screens = WinForms.Screen.AllScreens;
@@ -354,7 +419,66 @@ namespace TwitchChatOverlay.ViewModels
 
             LoadSettings();
             _ = ValidateSavedTokenAsync();
+            _ = AutoConnectYouTubeAsync();
             _ = CheckForUpdateAsync();
+        }
+
+        private async Task AutoConnectYouTubeAsync()
+        {
+            var settings = _settingsService.LoadSettings();
+            YouTubeChannelName = settings.YouTubeChannelName ?? YouTubeChannelName;
+
+            if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+            {
+                if (!string.IsNullOrEmpty(settings.YouTubeTokenInfo))
+                    YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                YouTubeStatusMessage = "未接続";
+                return;
+            }
+
+            try
+            {
+                YouTubeStatusMessage = "YouTube自動接続中...";
+                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                YouTubeStatusMessage = "✅ YouTube自動接続完了";
+            }
+            catch
+            {
+                if (string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
+                {
+                    YouTubeStatusMessage = "YouTube自動接続に失敗しました（再認可が必要）";
+                    return;
+                }
+
+                try
+                {
+                    var refreshed = await _youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                    settings.YouTubeOAuthToken = refreshed.AccessToken;
+                    settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                    settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                    _settingsService.SaveSettings(settings);
+
+                    YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                    YouTubeStatusMessage = "✅ YouTube自動接続完了";
+                }
+                catch (Exception ex)
+                {
+                    LogService.Warning("YouTube自動接続に失敗しました", ex);
+                    YouTubeStatusMessage = "YouTube自動接続に失敗しました（手動接続してください）";
+                }
+            }
+        }
+
+        public void InitializeRegions(IRegionManager regionManager)
+        {
+            if (_regionsInitialized)
+                return;
+
+            _regionsInitialized = true;
+            regionManager.RequestNavigate(RegionNames.CommonSettingsRegion, nameof(Views.Tabs.CommonSettingsTabView));
+            regionManager.RequestNavigate(RegionNames.TwitchSettingsRegion, nameof(Views.Tabs.TwitchSettingsTabView));
+            regionManager.RequestNavigate(RegionNames.YouTubeSettingsRegion, nameof(Views.Tabs.YouTubeSettingsTabView));
         }
 
         private async Task AutoConnectAsync()
@@ -743,8 +867,11 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 var settings = _settingsService.LoadSettings();
+                settings.SelectedTabIndex = SelectedTabIndex;
                 settings.ChannelName = ChannelName;
                 settings.OAuthToken = OAuthToken;
+                settings.YouTubeChannelName = YouTubeChannelName;
+                settings.YouTubeTokenInfo = YouTubeTokenInfo;
                 settings.ShowReward = ShowReward;
                 settings.ShowRaid = ShowRaid;
                 settings.ShowFollow = ShowFollow;
@@ -753,6 +880,9 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ShowResub = ShowResub;
                 settings.ShowHypeTrainBegin = ShowHypeTrainBegin;
                 settings.ShowHypeTrainEnd = ShowHypeTrainEnd;
+                settings.ShowYouTubeChat = ShowYouTubeChat;
+                settings.ShowYouTubeSuperChat = ShowYouTubeSuperChat;
+                settings.ShowYouTubeMembership = ShowYouTubeMembership;
                 settings.ToastDurationSeconds = ToastDurationSeconds;
                 settings.ToastMaxCount = ToastMaxCount;
                 settings.ToastPosition = (Services.ToastPosition)ToastPositionIndex;
@@ -781,8 +911,11 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 var settings = _settingsService.LoadSettings();
+                SelectedTabIndex = settings.SelectedTabIndex;
                 ChannelName = settings.ChannelName ?? "";
                 OAuthToken = settings.OAuthToken ?? "";
+                YouTubeChannelName = settings.YouTubeChannelName ?? "";
+                YouTubeTokenInfo = string.IsNullOrEmpty(settings.YouTubeTokenInfo) ? "未認可" : settings.YouTubeTokenInfo;
 
                 RecentChannels.Clear();
                 foreach (var ch in settings.RecentChannels)
@@ -796,6 +929,9 @@ namespace TwitchChatOverlay.ViewModels
                 ShowResub = settings.ShowResub;
                 ShowHypeTrainBegin = settings.ShowHypeTrainBegin;
                 ShowHypeTrainEnd = settings.ShowHypeTrainEnd;
+                ShowYouTubeChat = settings.ShowYouTubeChat;
+                ShowYouTubeSuperChat = settings.ShowYouTubeSuperChat;
+                ShowYouTubeMembership = settings.ShowYouTubeMembership;
                 ToastDurationSeconds = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds : 5;
                 ToastMaxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
                 ToastPositionIndex = (int)settings.ToastPosition;
@@ -819,6 +955,119 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Error("設定の読み込みに失敗しました", ex);
                 StatusMessage = $"設定の読み込みに失敗: {ex.Message}";
             }
+        }
+
+        private async void AuthorizeYouTubeOAuth()
+        {
+            try
+            {
+                YouTubeStatusMessage = "YouTube OAuth 認可を開始しています...";
+                var token = await _youTubeOAuthService.AuthorizeAsync(BuildSecrets.YouTubeClientId);
+
+                var settings = _settingsService.LoadSettings();
+                settings.YouTubeOAuthToken = token.AccessToken;
+                settings.YouTubeRefreshToken = token.RefreshToken;
+                settings.YouTubeTokenInfo = $"✅ 認可済み | 取得日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                _settingsService.SaveSettings(settings);
+
+                YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                YouTubeStatusMessage = "✅ YouTube OAuth 認可が完了しました";
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("YouTube OAuth認可エラー", ex);
+                YouTubeStatusMessage = $"YouTube OAuth エラー: {ex.Message}";
+            }
+        }
+
+        private async void ConnectYouTube()
+        {
+            var settings = _settingsService.LoadSettings();
+            if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+            {
+                YouTubeStatusMessage = "先にYouTube OAuth認可を実行してください";
+                return;
+            }
+
+            try
+            {
+                YouTubeStatusMessage = "YouTube Live Chat に接続中...";
+                settings.YouTubeChannelName = YouTubeChannelName;
+                _settingsService.SaveSettings(settings);
+
+                try
+                {
+                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                }
+                catch (Exception ex) when (IsYouTubeUnauthorized(ex))
+                {
+                    if (string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
+                        throw;
+
+                    var refreshed = await _youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                    settings.YouTubeOAuthToken = refreshed.AccessToken;
+                    settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                    settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                    _settingsService.SaveSettings(settings);
+
+                    YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                }
+
+                YouTubeStatusMessage = "✅ YouTube Live Chat 接続完了";
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("YouTube接続エラー", ex);
+                YouTubeStatusMessage = $"YouTube接続エラー: {ex.Message}";
+            }
+        }
+
+        private void DisconnectYouTube()
+        {
+            _youTubeLiveChatService.Disconnect();
+            YouTubeStatusMessage = "YouTube接続を切断しました";
+        }
+
+        private async void OnYouTubeConnectionLost(object sender, YouTubeConnectionLostEventArgs e)
+        {
+            if (_youTubeLiveChatService.IsConnected)
+                return;
+
+            var settings = _settingsService.LoadSettings();
+
+            try
+            {
+                if (e.IsUnauthorized && !string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
+                {
+                    var refreshed = await _youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                    settings.YouTubeOAuthToken = refreshed.AccessToken;
+                    settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                    settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                    _settingsService.SaveSettings(settings);
+                    YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                }
+
+                if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+                {
+                    YouTubeStatusMessage = "YouTube接続が切断されました（再認可が必要）";
+                    return;
+                }
+
+                YouTubeStatusMessage = "YouTube再接続中...";
+                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken, YouTubeChannelName);
+                YouTubeStatusMessage = "✅ YouTube再接続完了";
+            }
+            catch (Exception ex)
+            {
+                LogService.Warning("YouTube再接続に失敗しました", ex);
+                YouTubeStatusMessage = $"YouTube再接続失敗: {ex.Message}";
+            }
+        }
+
+        private static bool IsYouTubeUnauthorized(Exception ex)
+        {
+            return ex is YouTubeApiException apiEx && apiEx.StatusCode == 401;
         }
     }
 }

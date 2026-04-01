@@ -5,6 +5,7 @@
   <PropertyGroup>
     <!-- ビルド時にGitHub Actionsから注入されるシークレット。ローカルビルド時は空文字。 -->
     <TwitchClientId Condition="'$(TwitchClientId)' == ''"></TwitchClientId>
+    <YouTubeClientId Condition="'$(YouTubeClientId)' == ''"></YouTubeClientId>
   </PropertyGroup>
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -31,7 +32,7 @@
       <!-- GetFullPath でトレイリングスラッシュを除去（バックスラッシュがクォートをエスケープするのを防ぐ） -->
       <_BuildSecretsOut>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)'))</_BuildSecretsOut>
     </PropertyGroup>
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BuildSecretsScript)&quot; -ClientId &quot;$(TwitchClientId)&quot; -OutPath &quot;$(_BuildSecretsOut)&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BuildSecretsScript)&quot; -ClientId &quot;$(TwitchClientId)&quot; -YouTubeClientId &quot;$(YouTubeClientId)&quot; -OutPath &quot;$(_BuildSecretsOut)&quot;" />
     <ItemGroup>
       <Compile Include="$(_BuildSecretsOut)\BuildSecrets.g.cs" />
     </ItemGroup>

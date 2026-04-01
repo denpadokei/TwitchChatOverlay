@@ -12,9 +12,14 @@ namespace TwitchChatOverlay.Services
 
     public class AppSettings
     {
+        public int SelectedTabIndex { get; set; } = 0;
         public string ChannelName { get; set; }
         public string OAuthToken { get; set; }
         public string RefreshToken { get; set; }
+        public string YouTubeChannelName { get; set; }
+        public string YouTubeOAuthToken { get; set; }
+        public string YouTubeRefreshToken { get; set; }
+        public string YouTubeTokenInfo { get; set; }
         public string BroadcasterUserId { get; set; }
         public string UserId { get; set; }
         /// <summary>トークンを取得した日時（UTC）</summary>
@@ -47,6 +52,9 @@ namespace TwitchChatOverlay.Services
         public bool ShowResub { get; set; } = true;
         public bool ShowHypeTrainBegin { get; set; } = true;
         public bool ShowHypeTrainEnd { get; set; } = true;
+        public bool ShowYouTubeChat { get; set; } = true;
+        public bool ShowYouTubeSuperChat { get; set; } = true;
+        public bool ShowYouTubeMembership { get; set; } = true;
         public System.Collections.Generic.List<string> RecentChannels { get; set; } = new();
     }
 
@@ -54,6 +62,8 @@ namespace TwitchChatOverlay.Services
     {
         private readonly string _settingsPath;
         private static readonly byte[] _encryptionKey = Encoding.UTF8.GetBytes("TwitchChatOverlaySecretKey123456"); // 32バイト
+        private readonly object _sync = new();
+        private AppSettings _cachedSettings;
 
         public SettingsService()
         {
@@ -70,7 +80,8 @@ namespace TwitchChatOverlay.Services
         {
             try
             {
-                string json = JsonSerializer.Serialize(settings);
+                var target = settings ?? new AppSettings();
+                string json = JsonSerializer.Serialize(target);
                 byte[] plaintext = Encoding.UTF8.GetBytes(json);
 
                 using (var aes = Aes.Create())
@@ -96,6 +107,11 @@ namespace TwitchChatOverlay.Services
                         }
                     }
                 }
+
+                lock (_sync)
+                {
+                    _cachedSettings = CloneSettings(target);
+                }
             }
             catch (Exception ex)
             {
@@ -111,9 +127,20 @@ namespace TwitchChatOverlay.Services
         {
             try
             {
+                lock (_sync)
+                {
+                    if (_cachedSettings != null)
+                        return CloneSettings(_cachedSettings);
+                }
+
                 if (!File.Exists(_settingsPath))
                 {
-                    return new AppSettings();
+                    var defaults = new AppSettings();
+                    lock (_sync)
+                    {
+                        _cachedSettings = CloneSettings(defaults);
+                    }
+                    return defaults;
                 }
 
                 byte[] encryptedData = File.ReadAllBytes(_settingsPath);
@@ -138,7 +165,11 @@ namespace TwitchChatOverlay.Services
                                 using (var sr = new StreamReader(cs, Encoding.UTF8))
                                 {
                                     string json = sr.ReadToEnd();
-                                    var settings = JsonSerializer.Deserialize<AppSettings>(json);
+                                    var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                                    lock (_sync)
+                                    {
+                                        _cachedSettings = CloneSettings(settings);
+                                    }
                                     return settings;
                                 }
                             }
@@ -151,6 +182,12 @@ namespace TwitchChatOverlay.Services
                 LogService.Error("設定の読み込みに失敗しました", ex);
                 throw new Exception($"設定の読み込みに失敗しました: {ex.Message}", ex);
             }
+        }
+
+        private static AppSettings CloneSettings(AppSettings settings)
+        {
+            var json = JsonSerializer.Serialize(settings ?? new AppSettings());
+            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
         }
     }
 }

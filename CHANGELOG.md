@@ -11,6 +11,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-04-01
+
+### Added
+- MainWindow の設定UIを Prism RegionManager ベースのタブ構成へ移行
+  - `共通` / `Twitch` / `YouTube` の3タブを追加
+  - 各タブを UserControl 化（`CommonSettingsTabView` / `TwitchSettingsTabView` / `YouTubeSettingsTabView`）
+  - `RegionNames` を追加して Region 名を定数管理
+- YouTube OAuth（Authorization Code + PKCE）を新規実装
+  - `Services/YouTubeOAuthService.cs` を追加
+  - ローカルコールバック (`http://127.0.0.1:18765/callback/`) でトークン取得
+  - リフレッシュトークンによるアクセストークン更新メソッドを追加
+- YouTube Live Chat 受信を新規実装
+  - `Services/YouTubeLiveChatService.cs` を追加
+  - `liveBroadcasts` から `liveChatId` を取得し、`liveChat/messages` をポーリング
+  - `textMessageEvent` / `superChatEvent` / `newSponsorEvent` / `memberMilestoneChatEvent` を `OverlayNotification` にマッピング
+- BuildSecrets の自動生成を拡張
+  - `BuildSecrets.YouTubeClientId` を追加
+  - `build/Generate-BuildSecrets.ps1` に `YouTubeClientId` パラメータを追加
+  - `TwitchChatOverlay.csproj` に `YouTubeClientId` プロパティとビルド注入を追加
+  - `build/local.props.example` に `YouTubeClientId` 設定を追加
+
+### Changed
+- `MainWindow.xaml` の直書き設定UIを削除し、タブ+Regionホスト構成へ変更
+- `ToastNotificationService` を単一ソース購読から複数ソース購読へ変更
+  - Twitch + YouTube の同時購読に対応
+  - プラットフォーム別通知フィルタ（YouTube Chat/Super Chat/Membership）に対応
+- `OverlayNotification` に `SourcePlatform` プロパティを追加
+  - 通知の発生元（Twitch / YouTube）を識別可能に変更
+- `MainWindowViewModel` に YouTube 設定・接続状態・コマンド群を追加
+  - `AuthorizeYouTubeOAuthCommand` / `ConnectYouTubeCommand` / `DisconnectYouTubeCommand`
+  - `SelectedTabIndex` を含むタブ状態の保存・復元に対応
+- `App.xaml.cs` の DI 登録を拡張
+  - `YouTubeOAuthService` / `YouTubeLiveChatService` の登録
+  - タブViewの `RegisterForNavigation` を追加
+
+### Fixed
+- YouTube接続の耐障害性を改善
+  - 401（Unauthorized）時のみトークン更新を試行するよう修正
+  - `YouTubeLiveChatService.ConnectionLost` イベントを追加し、自動再接続フローを実装
+- アプリ終了時のクリーンアップを改善
+  - `MainWindow` クローズ時に YouTube 接続も確実に切断するよう修正
+- 設定I/Oの効率と安全性を改善
+  - `SettingsService` にスレッドセーフなメモリキャッシュを追加
+  - `LoadSettings()` の null 安全化とクローン返却で破壊的変更リスクを低減
+
+### Docs
+- `README.md` を Twitch + YouTube 対応内容に更新
+  - YouTube OAuth / Live Chat 接続手順を追加
+  - Twitch / YouTube Client ID の詳細取得手順を追加
+  - Google Cloud 側の必須設定（OAuth同意画面・API有効化・loopback URI）を追記
+
+---
+
 ## [0.3.1] - 2026-03-30
 
 ### Added

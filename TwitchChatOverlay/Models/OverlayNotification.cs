@@ -19,6 +19,7 @@ namespace TwitchChatOverlay.Models
 
     public class OverlayNotification
     {
+        public string SourcePlatform { get; set; } = "Twitch";
         public NotificationType Type { get; set; }
         public string Username { get; set; }
         public string DisplayText { get; set; }

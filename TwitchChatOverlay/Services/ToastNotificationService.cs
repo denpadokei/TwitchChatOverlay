@@ -52,14 +52,15 @@ namespace TwitchChatOverlay.Services
             _settingsService = settingsService;
         }
 
-        public void Initialize(TwitchEventSubService eventSubService)
+        public void Initialize(TwitchEventSubService twitchEventSubService, YouTubeLiveChatService youTubeLiveChatService)
         {
-            eventSubService.NotificationReceived += OnNotificationReceived;
+            twitchEventSubService.NotificationReceived += OnNotificationReceived;
+            youTubeLiveChatService.NotificationReceived += OnNotificationReceived;
         }
 
         private void OnNotificationReceived(object sender, OverlayNotification notification)
         {
-            if (!ShouldShow(notification.Type))
+            if (!ShouldShow(notification))
                 return;
 
             Application.Current.Dispatcher.Invoke(() =>
@@ -75,16 +76,18 @@ namespace TwitchChatOverlay.Services
             });
         }
 
-        private bool ShouldShow(NotificationType type)
+        private bool ShouldShow(OverlayNotification notification)
         {
             var settings = _settingsService.LoadSettings();
-            return type switch
+            bool isYouTube = string.Equals(notification.SourcePlatform, "YouTube", StringComparison.OrdinalIgnoreCase);
+
+            return notification.Type switch
             {
-                NotificationType.Chat => true,
-                NotificationType.Reward => settings.ShowReward,
+                NotificationType.Chat => isYouTube ? settings.ShowYouTubeChat : true,
+                NotificationType.Reward => isYouTube ? settings.ShowYouTubeSuperChat : settings.ShowReward,
                 NotificationType.Raid => settings.ShowRaid,
                 NotificationType.Follow => settings.ShowFollow,
-                NotificationType.Subscribe => settings.ShowSubscribe,
+                NotificationType.Subscribe => isYouTube ? settings.ShowYouTubeMembership : settings.ShowSubscribe,
                 NotificationType.GiftSubscribe => settings.ShowGiftSubscribe,
                 NotificationType.Resub => settings.ShowResub,
                 NotificationType.HypeTrainBegin => settings.ShowHypeTrainBegin,

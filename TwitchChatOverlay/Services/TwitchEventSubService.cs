@@ -215,6 +215,7 @@ namespace TwitchChatOverlay.Services
 
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.Chat,
                 Username = evt["chatter_user_name"]?.ToString() ?? evt["chatter_user_login"]?.ToString() ?? "",
                 DisplayText = msgText,
@@ -227,6 +228,7 @@ namespace TwitchChatOverlay.Services
         {
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.Reward,
                 Username = evt["user_name"]?.ToString() ?? evt["user_login"]?.ToString() ?? "",
                 DisplayText = evt["reward"]?["title"]?.ToString() ?? "リワード交換",
@@ -239,6 +241,7 @@ namespace TwitchChatOverlay.Services
             var viewers = evt["viewers"]?.ToString() ?? "0";
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.Raid,
                 Username = evt["from_broadcaster_user_name"]?.ToString() ?? "",
                 DisplayText = "レイドが来ました！",
@@ -250,6 +253,7 @@ namespace TwitchChatOverlay.Services
         {
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.Follow,
                 Username = evt["user_name"]?.ToString() ?? evt["user_login"]?.ToString() ?? "",
                 DisplayText = "フォローしました！"
@@ -267,6 +271,7 @@ namespace TwitchChatOverlay.Services
             };
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.Subscribe,
                 Username = evt["user_name"]?.ToString() ?? evt["user_login"]?.ToString() ?? "",
                 DisplayText = "チャンネルをサブスクしました！",
@@ -280,6 +285,7 @@ namespace TwitchChatOverlay.Services
             var isAnon = evt["is_anonymous"]?.Value<bool>() == true;
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.GiftSubscribe,
                 Username = isAnon ? "匿名" : (evt["user_name"]?.ToString() ?? evt["user_login"]?.ToString() ?? ""),
                 DisplayText = $"{total}件のギフトサブスクを贈りました！"
@@ -291,6 +297,7 @@ namespace TwitchChatOverlay.Services
             var months = evt["cumulative_months"]?.ToString() ?? "?";
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.Resub,
                 Username = evt["user_name"]?.ToString() ?? evt["user_login"]?.ToString() ?? "",
                 DisplayText = "リサブしました！",
@@ -303,6 +310,7 @@ namespace TwitchChatOverlay.Services
             var level = evt["level"]?.ToString() ?? "1";
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.HypeTrainBegin,
                 Username = "",
                 DisplayText = "ハイプトレイン開始！",
@@ -315,6 +323,7 @@ namespace TwitchChatOverlay.Services
             var level = evt["level"]?.ToString() ?? "1";
             return new OverlayNotification
             {
+                SourcePlatform = "Twitch",
                 Type = NotificationType.HypeTrainEnd,
                 Username = "",
                 DisplayText = "ハイプトレイン終了！",

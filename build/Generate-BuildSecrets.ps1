@@ -4,11 +4,14 @@
     生成されたファイルはgitには含まれず、ビルド時にのみ作成される。
 .PARAMETER ClientId
     TwitchのClientId
+.PARAMETER YouTubeClientId
+    YouTube OAuthのClientId
 .PARAMETER OutPath
     出力先ディレクトリ（通常はIntermediateOutputPath）
 #>
 param(
     [string]$ClientId = "",
+    [string]$YouTubeClientId = "",
     [string]$OutPath = "."
 )
 
@@ -39,9 +42,11 @@ function Format-ByteArrayLiteral([byte[]]$bytes) {
 
 # XORエンコード
 $clientIdBytes = ConvertTo-XorBytes $ClientId
+$youtubeClientIdBytes = ConvertTo-XorBytes $YouTubeClientId
 
 # C# リテラル生成
 $clientIdLiteral = Format-ByteArrayLiteral $clientIdBytes
+$youtubeClientIdLiteral = Format-ByteArrayLiteral $youtubeClientIdBytes
 
 # XORキーのC#リテラル
 $keyLiteral = Format-ByteArrayLiteral $key
@@ -76,6 +81,7 @@ namespace TwitchChatOverlay
         }
 
         internal static string ClientId => Dec($clientIdLiteral);
+        internal static string YouTubeClientId => Dec($youtubeClientIdLiteral);
     }
 }
 "@
