@@ -98,6 +98,7 @@ namespace TwitchChatOverlay.ViewModels
         private readonly YouTubeOAuthService _youTubeOAuthService;
         private readonly YouTubeLiveChatService _youTubeLiveChatService;
         private Timer _tokenRefreshTimer;
+        private Timer _youtubeTokenRefreshTimer;
 
         public string Title
         {
@@ -531,6 +532,65 @@ namespace TwitchChatOverlay.ViewModels
         {
             _tokenRefreshTimer?.Dispose();
             _tokenRefreshTimer = null;
+        }
+
+        /// <summary>YouTube接続完了後に50分ごとのトークン予防的リフレッシュタイマーを開始する。</summary>
+        private void StartYouTubeTokenRefreshTimer()
+        {
+            _youtubeTokenRefreshTimer?.Dispose();
+#if DEBUG
+            // デバッグ時は3分ごとにリフレッシュ（動作確認用）
+            var interval = TimeSpan.FromMinutes(3);
+#else
+            // 50分ごとに実行（YouTube アクセストークンは約3600秒（1時間）で期限切れ）
+            var interval = TimeSpan.FromMinutes(50);
+#endif
+            _youtubeTokenRefreshTimer = new Timer(
+                _ => _ = RefreshYouTubeTokenSilentlyAsync(),
+                null,
+                interval,
+                interval);
+        }
+
+        private void StopYouTubeTokenRefreshTimer()
+        {
+            _youtubeTokenRefreshTimer?.Dispose();
+            _youtubeTokenRefreshTimer = null;
+        }
+
+        /// <summary>バックグラウンドでYouTubeトークンをリフレッシュし、接続中なら再接続する。</summary>
+        private async Task RefreshYouTubeTokenSilentlyAsync()
+        {
+            var settings = _settingsService.LoadSettings();
+            if (string.IsNullOrEmpty(settings.YouTubeRefreshToken))
+            {
+                LogService.Debug("[YouTube SilentRefresh] リフレッシュトークンがないためスキップ");
+                return;
+            }
+
+            try
+            {
+                LogService.Debug("[YouTube SilentRefresh] バックグラウンド更新を開始");
+                var refreshed = await _youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                settings.YouTubeOAuthToken = refreshed.AccessToken;
+                settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                _settingsService.SaveSettings(settings);
+
+                YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                LogService.Debug($"[YouTube SilentRefresh] トークン更新成功");
+
+                // 接続中の場合は新トークンで再接続
+                if (_youTubeLiveChatService.IsConnected || _youTubeLiveChatService.IsWaitingForBroadcast)
+                {
+                    LogService.Debug("[YouTube SilentRefresh] 接続中のため新トークンで再接続");
+                    await _youTubeLiveChatService.ConnectAsync(refreshed.AccessToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogService.Warning("[YouTube SilentRefresh] バックグラウンド更新に失敗", ex);
+            }
         }
 
         /// <summary>バックグラウンドでトークンをリフレッシュし、接続中なら再接続する。</summary>
@@ -988,6 +1048,7 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 YouTubeStatusMessage = "YouTube Live Chat に接続中...";
+                _settingsService.SaveSettings(settings);
 
                 try
                 {
@@ -1011,6 +1072,7 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                     : "✅ YouTube Live Chat 接続完了";
+                StartYouTubeTokenRefreshTimer();
             }
             catch (Exception ex)
             {
@@ -1021,6 +1083,7 @@ namespace TwitchChatOverlay.ViewModels
 
         private void DisconnectYouTube()
         {
+            StopYouTubeTokenRefreshTimer();
             _youTubeLiveChatService.Disconnect();
             YouTubeStatusMessage = "YouTube接続を切断しました";
         }
@@ -1030,6 +1093,7 @@ namespace TwitchChatOverlay.ViewModels
             if (_youTubeLiveChatService.IsConnected)
                 return;
 
+            StopYouTubeTokenRefreshTimer();
             var settings = _settingsService.LoadSettings();
 
             try
@@ -1055,6 +1119,7 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                     : "✅ YouTube再接続完了";
+                StartYouTubeTokenRefreshTimer();
             }
             catch (Exception ex)
             {
@@ -1068,6 +1133,7 @@ namespace TwitchChatOverlay.ViewModels
             Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
                 YouTubeStatusMessage = "✅ YouTube Live Chat 接続完了";
+                StartYouTubeTokenRefreshTimer();
             });
         }
 
