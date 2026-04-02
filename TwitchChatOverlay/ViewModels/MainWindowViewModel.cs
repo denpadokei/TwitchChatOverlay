@@ -86,6 +86,9 @@ namespace TwitchChatOverlay.ViewModels
         private readonly SettingsService _settingsService;
         private readonly UpdateService _updateService;
         private Timer _tokenRefreshTimer;
+        private Timer _validateTimer;
+        /// <summary>次回タイマー設定用: refresh 直後の expires_in（秒）。0 のときはデフォルト値を使用。</summary>
+        private int _nextRefreshExpiresIn;
 
         public string Title
         {
@@ -377,6 +380,7 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Info($"EventSub自動接続完了: {ChannelName}");
                 StatusMessage = $"✅ 接続完了 ({ChannelName})"; 
                 StartTokenRefreshTimer();
+                StartValidateTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
             }
@@ -387,7 +391,7 @@ namespace TwitchChatOverlay.ViewModels
             }
         }
 
-        /// <summary>接続完了後に3時間ごとのトークン予防的リフレッシュタイマーを開始する。</summary>
+        /// <summary>接続完了後にトークンリフレッシュタイマーを開始する。expires_in が既知の場合はそれに基づいて間隔を決定する。</summary>
         private void StartTokenRefreshTimer()
         {
             _tokenRefreshTimer?.Dispose();
@@ -395,8 +399,24 @@ namespace TwitchChatOverlay.ViewModels
             // デバッグ時は5分ごとにリフレッシュ（Twitch APIレート制限内で動作確認用）
             var interval = TimeSpan.FromMinutes(5);
 #else
-            // 3時間ごとに実行（アクセストークンは約4時間で期限切れ）
-            var interval = TimeSpan.FromHours(3);
+            TimeSpan interval;
+            int expiresIn = _nextRefreshExpiresIn;
+            if (expiresIn > 0)
+            {
+                // 有効期限の10分前にリフレッシュ。最低60秒、最大3時間に収める
+                int seconds = Math.Clamp(expiresIn - 600, 60, (int)TimeSpan.FromHours(3).TotalSeconds);
+                interval = TimeSpan.FromSeconds(seconds);
+                var nextAt = DateTime.Now.Add(interval);
+                LogService.Debug($"[TokenRefreshTimer] expires_in={expiresIn}s に基づき {interval.TotalMinutes:F0} 分後にリフレッシュ (次回予定: {nextAt:yyyy/MM/dd HH:mm:ss})");
+            }
+            else
+            {
+                // expires_in 不明時は3時間をデフォルトとする
+                interval = TimeSpan.FromHours(3);
+                var nextAt = DateTime.Now.Add(interval);
+                LogService.Debug($"[TokenRefreshTimer] expires_in 不明のため {interval.TotalHours:F0} 時間後にリフレッシュ (次回予定: {nextAt:yyyy/MM/dd HH:mm:ss})");
+            }
+            _nextRefreshExpiresIn = 0;
 #endif
             _tokenRefreshTimer = new Timer(
                 _ => _ = RefreshTokenSilentlyAsync(),
@@ -409,6 +429,73 @@ namespace TwitchChatOverlay.ViewModels
         {
             _tokenRefreshTimer?.Dispose();
             _tokenRefreshTimer = null;
+        }
+
+        /// <summary>毎時トークン検証タイマーを開始する。</summary>
+        private void StartValidateTimer()
+        {
+            _validateTimer?.Dispose();
+#if DEBUG
+            var interval = TimeSpan.FromMinutes(2);
+#else
+            var interval = TimeSpan.FromHours(1);
+#endif
+            _validateTimer = new Timer(
+                _ => _ = ValidateTokenPeriodicallyAsync(),
+                null,
+                interval,
+                interval);
+            LogService.Debug($"[ValidateTimer] {interval.TotalMinutes:F0} 分ごとの定期 validate を開始");
+        }
+
+        private void StopValidateTimer()
+        {
+            _validateTimer?.Dispose();
+            _validateTimer = null;
+        }
+
+        /// <summary>定期 validate。トークンが無効になっていれば切断して再認可を促す。</summary>
+        private async Task ValidateTokenPeriodicallyAsync()
+        {
+            // 開始時点のトークンをキャプチャして、その値に対してのみ validate を行う
+            var tokenAtStart = OAuthToken;
+            if (string.IsNullOrEmpty(tokenAtStart))
+                return;
+
+            LogService.Debug("[ValidateTimer] 定期トークン検証を開始");
+            try
+            {
+                var (isValid, _, _, expiresIn) = await _apiService.ValidateTokenAsync(tokenAtStart);
+                if (isValid)
+                {
+                    LogService.Debug($"[ValidateTimer] トークン有効 expires_in={expiresIn}s (期限: {DateTime.Now.AddSeconds(expiresIn):yyyy/MM/dd HH:mm:ss})");
+                    return;
+                }
+
+                // validate 中にトークンが更新されていないか確認し、stale 結果であれば無視する
+                if (!string.Equals(OAuthToken, tokenAtStart, StringComparison.Ordinal))
+                {
+                    LogService.Debug("[ValidateTimer] validate 結果は古いトークンに対するもののため、セッション終了をスキップします");
+                    return;
+                }
+
+                // トークンが無効になっていた場合はセッションを終了する
+                LogService.Warning("[ValidateTimer] トークンが無効になっています。セッションを終了します");
+                StopTokenRefreshTimer();
+                StopValidateTimer();
+                _eventSubService.Disconnect();
+
+                OAuthToken = "";
+                TokenInfo = "⚠️ トークンが無効になりました。再認可してください";
+                StatusMessage = "⚠️ トークンが無効になりました。再認可してください";
+                ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
+                ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+            }
+            catch (Exception ex)
+            {
+                // ネットワークエラーはスキップ（次の周期で再試行）
+                LogService.Warning("[ValidateTimer] 定期トークン検証中にエラーが発生しました（次の周期で再試行）", ex);
+            }
         }
 
         /// <summary>バックグラウンドでトークンをリフレッシュし、接続中なら再接続する。</summary>
@@ -435,7 +522,10 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                LogService.Debug($"[SilentRefresh] 更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
+                string expiryInfo = newToken.ExpiresIn > 0
+                    ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
+                    : "expires_in 不明";
+                LogService.Debug($"[SilentRefresh] 更新成功 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
 
                 // 接続中であればトークンを更新して再接続
                 if (_eventSubService.IsConnected)
@@ -443,9 +533,15 @@ namespace TwitchChatOverlay.ViewModels
                     LogService.Debug("[SilentRefresh] 接続中のため再接続を実行");
                     _eventSubService.Disconnect();
                     await Task.Delay(500);
+                    _nextRefreshExpiresIn = newToken.ExpiresIn;
                     await AutoConnectAsync();
                     LogService.Debug("[SilentRefresh] 再接続完了");
                 }
+            }
+            catch (TwitchTokenRefreshException ex) when (ex.IsInvalidRefreshToken)
+            {
+                InvalidateTwitchRefreshToken(settings, "SilentRefresh");
+                LogService.Warning("トークンのサイレントリフレッシュに失敗しました（無効なリフレッシュトークン）", ex);
             }
             catch (Exception ex)
             {
@@ -458,6 +554,7 @@ namespace TwitchChatOverlay.ViewModels
         private async void OnConnectionLost(object sender, EventArgs e)
         {
             StopTokenRefreshTimer();
+            StopValidateTimer();
             ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
             ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
 
@@ -485,9 +582,21 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                LogService.Debug($"[OnConnectionLost] トークン更新成功。再接続を開始 user={settings.OAuthTokenLogin ?? "(不明)"}");
+                string expiryInfo = newToken.ExpiresIn > 0
+                    ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
+                    : "expires_in 不明";
+                LogService.Debug($"[OnConnectionLost] トークン更新成功。再接続を開始 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
 
+                _nextRefreshExpiresIn = newToken.ExpiresIn;
                 await AutoConnectAsync();
+            }
+            catch (TwitchTokenRefreshException ex) when (ex.IsInvalidRefreshToken)
+            {
+                InvalidateTwitchRefreshToken(settings, "OnConnectionLost");
+                LogService.Error("再接続エラー。無効なリフレッシュトークンのため再認可が必要です", ex);
+                StatusMessage = "⚠️ リフレッシュトークンが無効です。再認可してください";
+                TokenInfo = "⚠️ トークンの更新に失敗しました。再認可してください";
+                OAuthToken = "";
             }
             catch (Exception ex)
             {
@@ -502,10 +611,54 @@ namespace TwitchChatOverlay.ViewModels
         {
             var settings = _settingsService.LoadSettings();
 
-            // リフレッシュトークンがある場合は起動時に必ずトークンを更新する
+            // まず保存済みアクセストークンを検証し、有効ならそのまま接続する
+            if (!string.IsNullOrEmpty(OAuthToken))
+            {
+                try
+                {
+                    // 残り600秒（10分）未満なら有効でも先行リフレッシュする
+                    const int RefreshThresholdSeconds = 600;
+
+                    var (isValid, login, userId, expiresIn) = await _apiService.ValidateTokenAsync(OAuthToken);
+                    if (isValid && expiresIn >= RefreshThresholdSeconds)
+                    {
+                        string savedAt = settings.OAuthTokenSavedAt.HasValue
+                            ? settings.OAuthTokenSavedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
+                            : "不明";
+                        TokenInfo = $"✅ {login ?? settings.OAuthTokenLogin ?? "(不明)"}  |  取得日: {savedAt}";
+                        LogService.Debug($"[Startup] トークン有効 expires_in={expiresIn}s (期限: {DateTime.Now.AddSeconds(expiresIn):yyyy/MM/dd HH:mm:ss})");
+
+                        // UserIdが未保存なら補完
+                        if (!string.IsNullOrEmpty(userId) && string.IsNullOrEmpty(settings.UserId))
+                        {
+                            settings.UserId = userId;
+                            settings.BroadcasterUserId = userId;
+                            _settingsService.SaveSettings(settings);
+                        }
+
+                        _nextRefreshExpiresIn = expiresIn;
+                        await AutoConnectAsync();
+                        return;
+                    }
+
+                    if (isValid)
+                        LogService.Debug($"[Startup] アクセストークンの残り有効期限が {expiresIn} 秒のため先行リフレッシュします");
+                    else
+                        LogService.Debug("[Startup] 保存済みアクセストークンは無効でした。リフレッシュを試行します");
+
+                    OAuthToken = "";
+                }
+                catch (Exception ex)
+                {
+                    // ネットワークエラー時はリフレッシュトークンがあれば続けて試行する
+                    LogService.Warning("トークン検証中にエラーが発生しました。リフレッシュにフォールバックします", ex);
+                }
+            }
+
+            // アクセストークンが使えない場合のみ、リフレッシュトークンで更新する
             if (!string.IsNullOrEmpty(settings.RefreshToken))
             {
-                LogService.Debug("[Startup] 起動時トークン更新を開始");
+                LogService.Debug("[Startup] リフレッシュトークンで更新を試行します");
                 try
                 {
                     TokenInfo = "🔄 トークンを更新中...";
@@ -520,55 +673,30 @@ namespace TwitchChatOverlay.ViewModels
 
                     string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                     TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                    LogService.Debug($"[Startup] 起動時トークン更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
+                    string expiryInfo = newToken.ExpiresIn > 0
+                        ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
+                        : "expires_in 不明";
+                    LogService.Debug($"[Startup] 起動時トークン更新成功 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
+                    _nextRefreshExpiresIn = newToken.ExpiresIn;
                     await AutoConnectAsync();
+                    return;
+                }
+                catch (TwitchTokenRefreshException ex) when (ex.IsInvalidRefreshToken)
+                {
+                    InvalidateTwitchRefreshToken(settings, "Startup");
+                    TokenInfo = "⚠️ トークンの有効期限が切れました。再認可してください";
+                    OAuthToken = "";
+                    LogService.Warning("起動時のトークン更新に失敗しました。リフレッシュトークンが無効です", ex);
                     return;
                 }
                 catch (Exception ex)
                 {
-                    // リフレッシュ失敗 → 既存トークンの検証にフォールバック
-                    LogService.Warning("起動時のトークン更新に失敗しました。既存トークンで接続を試みます", ex);
+                    LogService.Warning("起動時のトークン更新に失敗しました", ex);
                 }
             }
 
-            // リフレッシュトークンなし or 更新失敗 → 既存のアクセストークンを検証
             if (string.IsNullOrEmpty(OAuthToken))
-            {
                 TokenInfo = null;
-                return;
-            }
-
-            try
-            {
-                var (isValid, login, userId) = await _apiService.ValidateTokenAsync(OAuthToken);
-                if (isValid)
-                {
-                    string savedAt = settings.OAuthTokenSavedAt.HasValue
-                        ? settings.OAuthTokenSavedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
-                        : "不明";
-                    TokenInfo = $"✅ {login ?? settings.OAuthTokenLogin ?? "(不明)"}  |  取得日: {savedAt}";
-
-                    // UserIdが未保存なら補完
-                    if (!string.IsNullOrEmpty(userId) && string.IsNullOrEmpty(settings.UserId))
-                    {
-                        settings.UserId = userId;
-                        settings.BroadcasterUserId = userId;
-                        _settingsService.SaveSettings(settings);
-                    }
-
-                    await AutoConnectAsync();
-                }
-                else
-                {
-                    TokenInfo = "⚠️ トークンの有効期限が切れました。再認可してください";
-                    OAuthToken = "";
-                }
-            }
-            catch (Exception ex)
-            {
-                // ネットワークエラーなどは無視
-                LogService.Warning("トークン検証中にエラーが発生しました（無視）", ex);
-            }
         }
 
         private async Task CheckForUpdateAsync()
@@ -715,6 +843,7 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Info($"EventSub接続完了: {ChannelName}");
                 StatusMessage = $"✅ 接続完了 ({ChannelName})";
                 StartTokenRefreshTimer();
+                StartValidateTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
             }
@@ -729,6 +858,7 @@ namespace TwitchChatOverlay.ViewModels
         {
             LogService.Info("EventSub切断要求");
             StopTokenRefreshTimer();
+            StopValidateTimer();
             _eventSubService.Disconnect();
             StatusMessage = "切断しました";
             ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
@@ -819,6 +949,19 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Error("設定の読み込みに失敗しました", ex);
                 StatusMessage = $"設定の読み込みに失敗: {ex.Message}";
             }
+        }
+
+        private void InvalidateTwitchRefreshToken(AppSettings settings, string context)
+        {
+            if (settings == null)
+                return;
+
+            if (string.IsNullOrEmpty(settings.RefreshToken))
+                return;
+
+            settings.RefreshToken = "";
+            _settingsService.SaveSettings(settings);
+            LogService.Warning($"[{context}] 無効なリフレッシュトークンを検知したため、保存済みリフレッシュトークンをクリアしました");
         }
     }
 }

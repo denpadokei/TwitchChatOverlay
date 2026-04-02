@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,42 @@ using Newtonsoft.Json.Linq;
 
 namespace TwitchChatOverlay.Services
 {
+    public class TwitchTokenRefreshException : Exception
+    {
+        public int StatusCode { get; }
+        public string ErrorCode { get; }
+        public string ErrorMessage { get; }
+
+        public bool IsInvalidRefreshToken
+        {
+            get
+            {
+                if (StatusCode != (int)HttpStatusCode.BadRequest && StatusCode != (int)HttpStatusCode.Unauthorized)
+                    return false;
+
+                if (ContainsIgnoreCase(ErrorCode, "invalid_grant"))
+                    return true;
+
+                return ContainsIgnoreCase(ErrorMessage, "invalid refresh token")
+                    || ContainsIgnoreCase(ErrorMessage, "invalid_grant");
+            }
+        }
+
+        public TwitchTokenRefreshException(string message, int statusCode, string errorCode, string errorMessage)
+            : base(message)
+        {
+            StatusCode = statusCode;
+            ErrorCode = errorCode;
+            ErrorMessage = errorMessage;
+        }
+
+        private static bool ContainsIgnoreCase(string source, string value)
+        {
+            return !string.IsNullOrEmpty(source)
+                && source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+    }
+
     public class DeviceTokenResponse
     {
         [JsonProperty("access_token")]
@@ -19,6 +56,9 @@ namespace TwitchChatOverlay.Services
 
         [JsonProperty("scope")]
         public string[] Scope { get; set; }
+
+        [JsonProperty("expires_in")]
+        public int ExpiresIn { get; set; }
     }
 
     public class TwitchOAuthServer
@@ -64,11 +104,13 @@ namespace TwitchChatOverlay.Services
             if (!response.IsSuccessStatusCode)
             {
                 var baseMessage = $"トークンリフレッシュ失敗 (StatusCode: {(int)response.StatusCode})";
+                string error = null;
+                string message = null;
                 try
                 {
                     var obj = JObject.Parse(json);
-                    var error = (string?)obj["error"];
-                    var message = (string?)obj["message"];
+                    error = obj["error"]?.ToString();
+                    message = obj["message"]?.ToString();
 
                     if (!string.IsNullOrEmpty(error) || !string.IsNullOrEmpty(message))
                     {
@@ -83,7 +125,7 @@ namespace TwitchChatOverlay.Services
                 }
 
                 LogService.Debug($"[TokenRefresh] 失敗: {baseMessage}");
-                throw new Exception(baseMessage);
+                throw new TwitchTokenRefreshException(baseMessage, (int)response.StatusCode, error, message);
             }
 
             var result = JsonConvert.DeserializeObject<DeviceTokenResponse>(json)
