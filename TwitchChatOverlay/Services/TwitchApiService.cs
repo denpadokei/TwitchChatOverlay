@@ -33,7 +33,9 @@ namespace TwitchChatOverlay.Services
         }
 
         /// <summary>
-        /// 保存済みトークンが有効か検証する。有効なら (true, login) を返す。
+        /// 保存済みトークンが有効か検証する。
+        /// 成功時は (true, login, userId, expiresIn) を返し、expiresIn にはトークンの残り有効期限（秒）が入る。
+        /// 失敗時は (false, null, null, 0) を返し、ExpiresIn は常に 0 となる。
         /// </summary>
         public async Task<(bool IsValid, string Login, string UserId, int ExpiresIn)> ValidateTokenAsync(string accessToken)
         {

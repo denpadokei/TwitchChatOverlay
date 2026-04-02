@@ -457,16 +457,25 @@ namespace TwitchChatOverlay.ViewModels
         /// <summary>定期 validate。トークンが無効になっていれば切断して再認可を促す。</summary>
         private async Task ValidateTokenPeriodicallyAsync()
         {
-            if (string.IsNullOrEmpty(OAuthToken))
+            // 開始時点のトークンをキャプチャして、その値に対してのみ validate を行う
+            var tokenAtStart = OAuthToken;
+            if (string.IsNullOrEmpty(tokenAtStart))
                 return;
 
             LogService.Debug("[ValidateTimer] 定期トークン検証を開始");
             try
             {
-                var (isValid, _, _, expiresIn) = await _apiService.ValidateTokenAsync(OAuthToken);
+                var (isValid, _, _, expiresIn) = await _apiService.ValidateTokenAsync(tokenAtStart);
                 if (isValid)
                 {
                     LogService.Debug($"[ValidateTimer] トークン有効 expires_in={expiresIn}s (期限: {DateTime.Now.AddSeconds(expiresIn):yyyy/MM/dd HH:mm:ss})");
+                    return;
+                }
+
+                // validate 中にトークンが更新されていないか確認し、stale 結果であれば無視する
+                if (!string.Equals(OAuthToken, tokenAtStart, StringComparison.Ordinal))
+                {
+                    LogService.Debug("[ValidateTimer] validate 結果は古いトークンに対するもののため、セッション終了をスキップします");
                     return;
                 }
 
@@ -627,6 +636,7 @@ namespace TwitchChatOverlay.ViewModels
                             _settingsService.SaveSettings(settings);
                         }
 
+                        _nextRefreshExpiresIn = expiresIn;
                         await AutoConnectAsync();
                         return;
                     }
