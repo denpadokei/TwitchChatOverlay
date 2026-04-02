@@ -43,7 +43,11 @@ namespace TwitchChatOverlay.Services
 
         private static string GetCurrentVersion()
         {
+#if DEBUG
+            var v = new Version(0, 0, 1);
+#else
             var v = Assembly.GetExecutingAssembly().GetName().Version;
+#endif
             return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
         }
 
@@ -174,20 +178,23 @@ namespace TwitchChatOverlay.Services
 
             long? totalBytes = response.Content.Headers.ContentLength;
 
-            await using var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
-            await using var stream = await response.Content.ReadAsStreamAsync();
-
-            byte[] buffer = new byte[81920];
-            long downloaded = 0;
-            int read;
-
-            while ((read = await stream.ReadAsync(buffer)) > 0)
+            await using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            await using (var stream = await response.Content.ReadAsStreamAsync())
             {
-                await fs.WriteAsync(buffer.AsMemory(0, read));
-                downloaded += read;
+                byte[] buffer = new byte[81920];
+                long downloaded = 0;
+                int read;
 
-                if (totalBytes.HasValue && totalBytes > 0)
-                    progress?.Report((int)(downloaded * 100 / totalBytes.Value));
+                while ((read = await stream.ReadAsync(buffer)) > 0)
+                {
+                    await fs.WriteAsync(buffer.AsMemory(0, read));
+                    downloaded += read;
+
+                    if (totalBytes.HasValue && totalBytes > 0)
+                        progress?.Report((int)(downloaded * 100 / totalBytes.Value));
+                }
+
+                await fs.FlushAsync();
             }
 
             progress?.Report(100);
