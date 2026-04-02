@@ -404,12 +404,15 @@ namespace TwitchChatOverlay.ViewModels
                 // 有効期限の10分前にリフレッシュ。最低60秒、最大3時間に収める
                 int seconds = Math.Clamp(expiresIn - 600, 60, (int)TimeSpan.FromHours(3).TotalSeconds);
                 interval = TimeSpan.FromSeconds(seconds);
-                LogService.Debug($"[TokenRefreshTimer] expires_in={expiresIn}s に基づき {interval.TotalMinutes:F0} 分後にリフレッシュ");
+                var nextAt = DateTime.Now.Add(interval);
+                LogService.Debug($"[TokenRefreshTimer] expires_in={expiresIn}s に基づき {interval.TotalMinutes:F0} 分後にリフレッシュ (次回予定: {nextAt:yyyy/MM/dd HH:mm:ss})");
             }
             else
             {
                 // expires_in 不明時は3時間をデフォルトとする
                 interval = TimeSpan.FromHours(3);
+                var nextAt = DateTime.Now.Add(interval);
+                LogService.Debug($"[TokenRefreshTimer] expires_in 不明のため {interval.TotalHours:F0} 時間後にリフレッシュ (次回予定: {nextAt:yyyy/MM/dd HH:mm:ss})");
             }
             _nextRefreshExpiresIn = 0;
 #endif
@@ -450,7 +453,10 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                LogService.Debug($"[SilentRefresh] 更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
+                string expiryInfo = newToken.ExpiresIn > 0
+                    ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
+                    : "expires_in 不明";
+                LogService.Debug($"[SilentRefresh] 更新成功 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
 
                 // 接続中であればトークンを更新して再接続
                 if (_eventSubService.IsConnected)
@@ -506,7 +512,10 @@ namespace TwitchChatOverlay.ViewModels
 
                 string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                 TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                LogService.Debug($"[OnConnectionLost] トークン更新成功。再接続を開始 user={settings.OAuthTokenLogin ?? "(不明)"}");
+                string expiryInfo = newToken.ExpiresIn > 0
+                    ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
+                    : "expires_in 不明";
+                LogService.Debug($"[OnConnectionLost] トークン更新成功。再接続を開始 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
 
                 _nextRefreshExpiresIn = newToken.ExpiresIn;
                 await AutoConnectAsync();
@@ -547,6 +556,7 @@ namespace TwitchChatOverlay.ViewModels
                             ? settings.OAuthTokenSavedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
                             : "不明";
                         TokenInfo = $"✅ {login ?? settings.OAuthTokenLogin ?? "(不明)"}  |  取得日: {savedAt}";
+                        LogService.Debug($"[Startup] トークン有効 expires_in={expiresIn}s (期限: {DateTime.Now.AddSeconds(expiresIn):yyyy/MM/dd HH:mm:ss})");
 
                         // UserIdが未保存なら補完
                         if (!string.IsNullOrEmpty(userId) && string.IsNullOrEmpty(settings.UserId))
@@ -592,7 +602,10 @@ namespace TwitchChatOverlay.ViewModels
 
                     string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
                     TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                    LogService.Debug($"[Startup] 起動時トークン更新成功 user={settings.OAuthTokenLogin ?? "(不明)"}");
+                    string expiryInfo = newToken.ExpiresIn > 0
+                        ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
+                        : "expires_in 不明";
+                    LogService.Debug($"[Startup] 起動時トークン更新成功 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
                     _nextRefreshExpiresIn = newToken.ExpiresIn;
                     await AutoConnectAsync();
                     return;
