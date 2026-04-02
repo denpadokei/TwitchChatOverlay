@@ -86,6 +86,7 @@ namespace TwitchChatOverlay.ViewModels
         private readonly SettingsService _settingsService;
         private readonly UpdateService _updateService;
         private Timer _tokenRefreshTimer;
+        private Timer _validateTimer;
         /// <summary>次回タイマー設定用: refresh 直後の expires_in（秒）。0 のときはデフォルト値を使用。</summary>
         private int _nextRefreshExpiresIn;
 
@@ -379,6 +380,7 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Info($"EventSub自動接続完了: {ChannelName}");
                 StatusMessage = $"✅ 接続完了 ({ChannelName})"; 
                 StartTokenRefreshTimer();
+                StartValidateTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
             }
@@ -427,6 +429,64 @@ namespace TwitchChatOverlay.ViewModels
         {
             _tokenRefreshTimer?.Dispose();
             _tokenRefreshTimer = null;
+        }
+
+        /// <summary>毎時トークン検証タイマーを開始する。</summary>
+        private void StartValidateTimer()
+        {
+            _validateTimer?.Dispose();
+#if DEBUG
+            var interval = TimeSpan.FromMinutes(2);
+#else
+            var interval = TimeSpan.FromHours(1);
+#endif
+            _validateTimer = new Timer(
+                _ => _ = ValidateTokenPeriodicallyAsync(),
+                null,
+                interval,
+                interval);
+            LogService.Debug($"[ValidateTimer] {interval.TotalMinutes:F0} 分ごとの定期 validate を開始");
+        }
+
+        private void StopValidateTimer()
+        {
+            _validateTimer?.Dispose();
+            _validateTimer = null;
+        }
+
+        /// <summary>定期 validate。トークンが無効になっていれば切断して再認可を促す。</summary>
+        private async Task ValidateTokenPeriodicallyAsync()
+        {
+            if (string.IsNullOrEmpty(OAuthToken))
+                return;
+
+            LogService.Debug("[ValidateTimer] 定期トークン検証を開始");
+            try
+            {
+                var (isValid, _, _, expiresIn) = await _apiService.ValidateTokenAsync(OAuthToken);
+                if (isValid)
+                {
+                    LogService.Debug($"[ValidateTimer] トークン有効 expires_in={expiresIn}s (期限: {DateTime.Now.AddSeconds(expiresIn):yyyy/MM/dd HH:mm:ss})");
+                    return;
+                }
+
+                // トークンが無効になっていた場合はセッションを終了する
+                LogService.Warning("[ValidateTimer] トークンが無効になっています。セッションを終了します");
+                StopTokenRefreshTimer();
+                StopValidateTimer();
+                _eventSubService.Disconnect();
+
+                OAuthToken = "";
+                TokenInfo = "⚠️ トークンが無効になりました。再認可してください";
+                StatusMessage = "⚠️ トークンが無効になりました。再認可してください";
+                ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
+                ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+            }
+            catch (Exception ex)
+            {
+                // ネットワークエラーはスキップ（次の周期で再試行）
+                LogService.Warning("[ValidateTimer] 定期トークン検証中にエラーが発生しました（次の周期で再試行）", ex);
+            }
         }
 
         /// <summary>バックグラウンドでトークンをリフレッシュし、接続中なら再接続する。</summary>
@@ -485,6 +545,7 @@ namespace TwitchChatOverlay.ViewModels
         private async void OnConnectionLost(object sender, EventArgs e)
         {
             StopTokenRefreshTimer();
+            StopValidateTimer();
             ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
             ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
 
@@ -772,6 +833,7 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Info($"EventSub接続完了: {ChannelName}");
                 StatusMessage = $"✅ 接続完了 ({ChannelName})";
                 StartTokenRefreshTimer();
+                StartValidateTimer();
                 ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
                 ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
             }
@@ -786,6 +848,7 @@ namespace TwitchChatOverlay.ViewModels
         {
             LogService.Info("EventSub切断要求");
             StopTokenRefreshTimer();
+            StopValidateTimer();
             _eventSubService.Disconnect();
             StatusMessage = "切断しました";
             ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
