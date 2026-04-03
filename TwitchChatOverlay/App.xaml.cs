@@ -64,6 +64,7 @@ namespace TwitchChatOverlay
             containerRegistry.RegisterSingleton<TwitchEventSubService>();
             containerRegistry.RegisterSingleton<ToastNotificationService>();
             containerRegistry.RegisterSingleton<UpdateService>();
+            containerRegistry.RegisterSingleton<ObsWebSocketService>();
             containerRegistry.RegisterInstance<YouTubeOAuthService>(new YouTubeOAuthService(BuildSecrets.YouTubeClientSecret));
             containerRegistry.RegisterSingleton<YouTubeLiveChatService>();
 

@@ -12,10 +12,12 @@ namespace TwitchChatOverlay.Services
     public class YouTubeApiException : Exception
     {
         public int StatusCode { get; }
+        public TimeSpan? RetryAfter { get; }
 
-        public YouTubeApiException(int statusCode, string message) : base(message)
+        public YouTubeApiException(int statusCode, string message, TimeSpan? retryAfter = null) : base(message)
         {
             StatusCode = statusCode;
+            RetryAfter = retryAfter;
         }
     }
 
@@ -28,11 +30,15 @@ namespace TwitchChatOverlay.Services
     public class YouTubeLiveChatService
     {
         private static readonly HttpClient Http = new();
+        private const int BroadcastPollIntervalMs = 30_000;
+        private const int MessageCacheSize = 5000;
 
         private readonly HashSet<string> _seenMessageIds = new();
+        private readonly Queue<string> _seenMessageOrder = new();
         private CancellationTokenSource _cts;
         private string _accessToken;
         private string _liveChatId;
+        private bool _broadcastPollingPending;
 
         public event EventHandler<OverlayNotification> NotificationReceived;
         public event EventHandler<YouTubeConnectionLostEventArgs> ConnectionLost;
@@ -40,7 +46,12 @@ namespace TwitchChatOverlay.Services
         public bool IsConnected { get; private set; }
         public bool IsWaitingForBroadcast { get; private set; }
 
-        public async Task ConnectAsync(string accessToken)
+        public Task ConnectAsync(string accessToken)
+        {
+            return ConnectAsync(accessToken, checkImmediately: true, waitForObsSignalBeforePolling: false);
+        }
+
+        public async Task ConnectAsync(string accessToken, bool checkImmediately, bool waitForObsSignalBeforePolling)
         {
             if (string.IsNullOrWhiteSpace(accessToken))
                 throw new InvalidOperationException("YouTube OAuth token がありません。");
@@ -48,20 +59,41 @@ namespace TwitchChatOverlay.Services
             Disconnect();
             _accessToken = accessToken;
             _seenMessageIds.Clear();
+            _seenMessageOrder.Clear();
             _cts = new CancellationTokenSource();
+            _broadcastPollingPending = false;
 
-            _liveChatId = await ResolveLiveChatIdAsync(_cts.Token);
+            _liveChatId = checkImmediately ? await ResolveLiveChatIdAsync(_cts.Token) : null;
             if (string.IsNullOrWhiteSpace(_liveChatId))
             {
                 IsWaitingForBroadcast = true;
-                LogService.Info("YouTube 配信が見つかりません。配信開始を待機します...");
-                _ = Task.Run(() => WaitForBroadcastLoopAsync(_cts.Token));
+                _broadcastPollingPending = true;
+
+                if (waitForObsSignalBeforePolling)
+                {
+                    LogService.Info("YouTube 配信待機中です。OBS の配信開始検出後に30秒ポーリングを開始します。");
+                }
+                else
+                {
+                    LogService.Info("YouTube 配信が見つかりません。30秒ごとの配信確認を開始します。");
+                    StartBroadcastPolling();
+                }
                 return;
             }
 
             IsConnected = true;
             _ = Task.Run(() => PollLoopAsync(_cts.Token));
             LogService.Info($"YouTube Live Chat 接続開始: liveChatId={_liveChatId}");
+        }
+
+        public void StartBroadcastPolling()
+        {
+            if (!IsWaitingForBroadcast || !_broadcastPollingPending || _cts == null)
+                return;
+
+            _broadcastPollingPending = false;
+            _ = Task.Run(() => WaitForBroadcastLoopAsync(_cts.Token));
+            LogService.Info("YouTube 配信待機ポーリングを開始しました（30秒間隔）");
         }
 
         public void Disconnect()
@@ -71,17 +103,30 @@ namespace TwitchChatOverlay.Services
             _cts = null;
             IsConnected = false;
             IsWaitingForBroadcast = false;
+            _broadcastPollingPending = false;
         }
 
         private async Task WaitForBroadcastLoopAsync(CancellationToken cancellationToken)
         {
-            const int pollIntervalMs = 30_000;
+            long failureCount = 0;
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    await Task.Delay(pollIntervalMs, cancellationToken);
-                    _liveChatId = await ResolveLiveChatIdAsync(cancellationToken);
+                    await Task.Delay(BroadcastPollIntervalMs, cancellationToken);
+                    try
+                    {
+                        _liveChatId = await ResolveLiveChatIdAsync(cancellationToken);
+                        failureCount = 0;
+                    }
+                    catch (YouTubeApiException apiEx) when (apiEx.StatusCode != 401)
+                    {
+                        var delay = CalculateBackoffDelay(++failureCount, apiEx.RetryAfter);
+                        LogService.Warning($"YouTube 配信確認失敗: {apiEx.StatusCode}。{delay.TotalSeconds:F1}秒後に再試行します");
+                        await Task.Delay(delay, cancellationToken);
+                        continue;
+                    }
+
                     if (!string.IsNullOrWhiteSpace(_liveChatId))
                     {
                         IsWaitingForBroadcast = false;
@@ -103,6 +148,7 @@ namespace TwitchChatOverlay.Services
                 LogService.Error("YouTube 配信待機エラー", ex);
                 if (!cancellationToken.IsCancellationRequested)
                 {
+                    IsConnected = false;
                     ConnectionLost?.Invoke(this, new YouTubeConnectionLostEventArgs
                     {
                         IsUnauthorized = ex is YouTubeApiException apiEx && apiEx.StatusCode == 401,
@@ -128,7 +174,7 @@ namespace TwitchChatOverlay.Services
             var res = await Http.SendAsync(req, cancellationToken);
             string json = await res.Content.ReadAsStringAsync(cancellationToken);
             if (!res.IsSuccessStatusCode)
-                throw new YouTubeApiException((int)res.StatusCode, $"YouTube liveBroadcasts 取得失敗: {(int)res.StatusCode} {json}");
+                throw new YouTubeApiException((int)res.StatusCode, $"YouTube liveBroadcasts 取得失敗: {(int)res.StatusCode} {json}", GetRetryAfter(res));
 
             var obj = JObject.Parse(json);
             if (obj["items"] is not JArray items)
@@ -152,6 +198,7 @@ namespace TwitchChatOverlay.Services
         {
             string pageToken = null;
             int intervalMs = 5000;
+            long failureCount = 0;
 
             try
             {
@@ -173,12 +220,15 @@ namespace TwitchChatOverlay.Services
                     {
                         int statusCode = (int)res.StatusCode;
                         if (statusCode == 401)
-                            throw new YouTubeApiException(statusCode, $"YouTube liveChat poll失敗: {statusCode} {json}");
+                            throw new YouTubeApiException(statusCode, $"YouTube liveChat poll失敗: {statusCode} {json}", GetRetryAfter(res));
 
-                        LogService.Warning($"YouTube liveChat poll失敗: {statusCode} {json}");
-                        await Task.Delay(intervalMs, cancellationToken);
+                        var delay = CalculateBackoffDelay(++failureCount, GetRetryAfter(res));
+                        LogService.Warning($"YouTube liveChat poll失敗: {statusCode}。{delay.TotalSeconds:F1}秒後に再試行します");
+                        await Task.Delay(delay, cancellationToken);
                         continue;
                     }
+
+                    failureCount = 0;
 
                     var obj = JObject.Parse(json);
                     pageToken = obj["nextPageToken"]?.ToString();
@@ -196,9 +246,7 @@ namespace TwitchChatOverlay.Services
                         if (string.IsNullOrEmpty(messageId) || _seenMessageIds.Contains(messageId))
                             continue;
 
-                        _seenMessageIds.Add(messageId);
-                        if (_seenMessageIds.Count > 2000)
-                            _seenMessageIds.Clear();
+                        AddSeenMessageId(messageId);
 
                         var notification = BuildNotification(item);
                         if (notification != null)
@@ -218,6 +266,7 @@ namespace TwitchChatOverlay.Services
 
                 if (!cancellationToken.IsCancellationRequested)
                 {
+                    IsConnected = false;
                     var args = new YouTubeConnectionLostEventArgs
                     {
                         IsUnauthorized = ex is YouTubeApiException apiEx && apiEx.StatusCode == 401,
@@ -230,6 +279,49 @@ namespace TwitchChatOverlay.Services
             {
                 IsConnected = false;
             }
+        }
+
+        private void AddSeenMessageId(string messageId)
+        {
+            if (!_seenMessageIds.Add(messageId))
+                return;
+
+            _seenMessageOrder.Enqueue(messageId);
+            while (_seenMessageOrder.Count > MessageCacheSize)
+            {
+                string oldId = _seenMessageOrder.Dequeue();
+                _seenMessageIds.Remove(oldId);
+            }
+        }
+
+        private static TimeSpan CalculateBackoffDelay(long failureCount, TimeSpan? retryAfter)
+        {
+            if (retryAfter.HasValue && retryAfter.Value > TimeSpan.Zero)
+                return retryAfter.Value;
+
+            double exponent = Math.Min(failureCount, 62);
+            double baseSeconds = Math.Pow(2, exponent);
+            int jitterMs = Random.Shared.Next(0, 1000);
+            double totalMs = (baseSeconds * 1000.0) + jitterMs;
+            if (totalMs > int.MaxValue)
+                totalMs = int.MaxValue;
+
+            return TimeSpan.FromMilliseconds(totalMs);
+        }
+
+        private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
+        {
+            if (response.Headers.RetryAfter?.Delta is TimeSpan delta && delta > TimeSpan.Zero)
+                return delta;
+
+            if (response.Headers.RetryAfter?.Date is DateTimeOffset retryAt)
+            {
+                var diff = retryAt - DateTimeOffset.UtcNow;
+                if (diff > TimeSpan.Zero)
+                    return diff;
+            }
+
+            return null;
         }
 
         private static OverlayNotification BuildNotification(JToken item)

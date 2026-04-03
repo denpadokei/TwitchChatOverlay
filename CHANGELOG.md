@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `build/Generate-BuildSecrets.ps1` に `YouTubeClientId` パラメータを追加
   - `TwitchChatOverlay.csproj` に `YouTubeClientId` プロパティとビルド注入を追加
   - `build/local.props.example` に `YouTubeClientId` 設定を追加
+- OBS WebSocket 連携の基盤を追加
+  - `Services/ObsWebSocketService.cs` を追加
+  - OBS との接続・認証・`StreamStateChanged` イベント監視を実装
+  - `App.xaml.cs` の DI に `ObsWebSocketService` を登録
 
 ### Changed
 - `MainWindow.xaml` の直書き設定UIを削除し、タブ+Regionホスト構成へ変更
@@ -45,6 +49,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `App.xaml.cs` の DI 登録を拡張
   - `YouTubeOAuthService` / `YouTubeLiveChatService` の登録
   - タブViewの `RegisterForNavigation` を追加
+- YouTube 配信待機フローを OBS 連携対応へ拡張
+  - OBS 利用時は配信開始イベントを検出後に 30 秒間隔の待機ポーリングを開始
+  - OBS 未利用時は `ConnectYouTube` 実行時に 1 回だけ即時配信確認し、その後 30 秒間隔ポーリングへ移行
+- YouTube ポーリング失敗時の再試行戦略を改善
+  - `Retry-After` ヘッダー優先 + ジッター付き指数バックオフ（上限なし）を実装
+- 設定暗号化を新フォーマットへ移行
+  - フォーマット識別子（`TCOSET1`）付きの保存形式を導入
+  - Windows DPAPI（CurrentUser）で暗号化保存するよう変更
+  - 旧 AES-CBC 形式設定の自動移行を追加
 
 ### Fixed
 - YouTube接続の耐障害性を改善
@@ -55,6 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 設定I/Oの効率と安全性を改善
   - `SettingsService` にスレッドセーフなメモリキャッシュを追加
   - `LoadSettings()` の null 安全化とクローン返却で破壊的変更リスクを低減
+- YouTube 重複通知の抑制を改善
+  - 既読メッセージID管理を全消去方式から固定長キュー方式へ変更
+  - 長時間配信での重複再通知リスクを低減
 
 ### Docs
 - `README.md` を Twitch + YouTube 対応内容に更新

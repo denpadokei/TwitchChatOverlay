@@ -97,8 +97,10 @@ namespace TwitchChatOverlay.ViewModels
         private readonly UpdateService _updateService;
         private readonly YouTubeOAuthService _youTubeOAuthService;
         private readonly YouTubeLiveChatService _youTubeLiveChatService;
+        private readonly ObsWebSocketService _obsWebSocketService;
         private Timer _tokenRefreshTimer;
         private Timer _youtubeTokenRefreshTimer;
+        private int _isHandlingYouTubeConnectionLost;
 
         public string Title
         {
@@ -371,7 +373,8 @@ namespace TwitchChatOverlay.ViewModels
             ToastNotificationService toastService,
             UpdateService updateService,
             YouTubeOAuthService youTubeOAuthService,
-            YouTubeLiveChatService youTubeLiveChatService)
+            YouTubeLiveChatService youTubeLiveChatService,
+            ObsWebSocketService obsWebSocketService)
         {
             _settingsService = settingsService;
             _apiService = apiService;
@@ -380,6 +383,7 @@ namespace TwitchChatOverlay.ViewModels
             _updateService = updateService;
             _youTubeOAuthService = youTubeOAuthService;
             _youTubeLiveChatService = youTubeLiveChatService;
+            _obsWebSocketService = obsWebSocketService;
 
             ConnectCommand = new DelegateCommand(Connect, CanConnect);
             DisconnectCommand = new DelegateCommand(Disconnect, CanDisconnect);
@@ -403,6 +407,7 @@ namespace TwitchChatOverlay.ViewModels
             _eventSubService.ConnectionLost += OnConnectionLost;
             _youTubeLiveChatService.ConnectionLost += OnYouTubeConnectionLost;
             _youTubeLiveChatService.BroadcastDetected += OnYouTubeBroadcastDetected;
+            _obsWebSocketService.StreamingStateChanged += OnObsStreamingStateChanged;
 
             // モニター一覧を構築
             var screens = WinForms.Screen.AllScreens;
@@ -440,7 +445,12 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 YouTubeStatusMessage = "YouTube自動接続中...";
-                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
+                var obsState = await TryPrepareObsAsync(settings);
+                bool waitForObsSignal = obsState.UseObsForDetection;
+                await _youTubeLiveChatService.ConnectAsync(
+                    settings.YouTubeOAuthToken,
+                    checkImmediately: !waitForObsSignal,
+                    waitForObsSignalBeforePolling: waitForObsSignal);
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                     : "✅ YouTube自動接続完了";
@@ -465,7 +475,12 @@ namespace TwitchChatOverlay.ViewModels
                     _settingsService.SaveSettings(settings);
 
                     YouTubeTokenInfo = settings.YouTubeTokenInfo;
-                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
+                    var obsState = await TryPrepareObsAsync(settings);
+                    bool waitForObsSignal = obsState.UseObsForDetection;
+                    await _youTubeLiveChatService.ConnectAsync(
+                        settings.YouTubeOAuthToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
                     YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                         ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                         : "✅ YouTube自動接続完了";
@@ -1061,10 +1076,15 @@ namespace TwitchChatOverlay.ViewModels
             {
                 YouTubeStatusMessage = "YouTube Live Chat に接続中...";
                 _settingsService.SaveSettings(settings);
+                var obsState = await TryPrepareObsAsync(settings);
+                bool waitForObsSignal = obsState.UseObsForDetection;
 
                 try
                 {
-                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
+                    await _youTubeLiveChatService.ConnectAsync(
+                        settings.YouTubeOAuthToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
                 }
                 catch (Exception ex) when (IsYouTubeUnauthorized(ex))
                 {
@@ -1078,7 +1098,10 @@ namespace TwitchChatOverlay.ViewModels
                     _settingsService.SaveSettings(settings);
 
                     YouTubeTokenInfo = settings.YouTubeTokenInfo;
-                    await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
+                    await _youTubeLiveChatService.ConnectAsync(
+                        settings.YouTubeOAuthToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
                 }
 
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
@@ -1107,14 +1130,14 @@ namespace TwitchChatOverlay.ViewModels
 
         private async void OnYouTubeConnectionLost(object sender, YouTubeConnectionLostEventArgs e)
         {
-            if (_youTubeLiveChatService.IsConnected)
+            if (Interlocked.Exchange(ref _isHandlingYouTubeConnectionLost, 1) == 1)
                 return;
-
-            StopYouTubeTokenRefreshTimer();
-            var settings = _settingsService.LoadSettings();
 
             try
             {
+                StopYouTubeTokenRefreshTimer();
+                var settings = _settingsService.LoadSettings();
+
                 if (e.IsUnauthorized && !string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
                 {
                     var refreshed = await _youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
@@ -1132,7 +1155,12 @@ namespace TwitchChatOverlay.ViewModels
                 }
 
                 YouTubeStatusMessage = "YouTube再接続中...";
-                await _youTubeLiveChatService.ConnectAsync(settings.YouTubeOAuthToken);
+                var obsState = await TryPrepareObsAsync(settings);
+                bool waitForObsSignal = obsState.UseObsForDetection;
+                await _youTubeLiveChatService.ConnectAsync(
+                    settings.YouTubeOAuthToken,
+                    checkImmediately: !waitForObsSignal,
+                    waitForObsSignalBeforePolling: waitForObsSignal);
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
                     : "✅ YouTube再接続完了";
@@ -1143,6 +1171,44 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Warning("YouTube再接続に失敗しました", ex);
                 YouTubeStatusMessage = $"YouTube再接続失敗: {ex.Message}";
             }
+            finally
+            {
+                Interlocked.Exchange(ref _isHandlingYouTubeConnectionLost, 0);
+            }
+        }
+
+        private async Task<(bool UseObsForDetection, bool ObsConnected)> TryPrepareObsAsync(AppSettings settings)
+        {
+            if (!settings.ObsWebSocketEnabled)
+                return (false, false);
+
+            bool connected = _obsWebSocketService.IsConnected || await _obsWebSocketService.ConnectAsync(
+                settings.ObsWebSocketHost,
+                settings.ObsWebSocketPort,
+                settings.ObsWebSocketPassword);
+
+            if (!connected)
+            {
+                LogService.Warning("OBS連携が有効ですが接続できませんでした。即時配信確認にフォールバックします。");
+                return (false, false);
+            }
+
+            return (true, true);
+        }
+
+        private void OnObsStreamingStateChanged(object sender, ObsStreamingStateChangedEventArgs e)
+        {
+            if (!e.IsStreaming)
+                return;
+
+            if (!_youTubeLiveChatService.IsWaitingForBroadcast)
+                return;
+
+            _youTubeLiveChatService.StartBroadcastPolling();
+            Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                YouTubeStatusMessage = "⏳ OBS配信開始を検出。YouTube配信確認を開始しました...";
+            });
         }
 
         private void OnYouTubeBroadcastDetected(object sender, EventArgs e)

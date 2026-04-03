@@ -55,13 +55,18 @@ namespace TwitchChatOverlay.Services
         public bool ShowYouTubeChat { get; set; } = true;
         public bool ShowYouTubeSuperChat { get; set; } = true;
         public bool ShowYouTubeMembership { get; set; } = true;
+        public bool ObsWebSocketEnabled { get; set; } = false;
+        public string ObsWebSocketHost { get; set; } = "127.0.0.1";
+        public int ObsWebSocketPort { get; set; } = 4455;
+        public string ObsWebSocketPassword { get; set; } = "";
         public System.Collections.Generic.List<string> RecentChannels { get; set; } = new();
     }
 
     public class SettingsService
     {
         private readonly string _settingsPath;
-        private static readonly byte[] _encryptionKey = Encoding.UTF8.GetBytes("TwitchChatOverlaySecretKey123456"); // 32バイト
+        private static readonly byte[] _legacyEncryptionKey = Encoding.UTF8.GetBytes("TwitchChatOverlaySecretKey123456"); // 32バイト
+        private static readonly byte[] _settingsFormatHeader = Encoding.ASCII.GetBytes("TCOSET1\0");
         private readonly object _sync = new();
         private AppSettings _cachedSettings;
 
@@ -83,30 +88,11 @@ namespace TwitchChatOverlay.Services
                 var target = settings ?? new AppSettings();
                 string json = JsonSerializer.Serialize(target);
                 byte[] plaintext = Encoding.UTF8.GetBytes(json);
-
-                using (var aes = Aes.Create())
-                {
-                    aes.Key = _encryptionKey;
-                    aes.Mode = CipherMode.CBC;
-                    aes.Padding = PaddingMode.PKCS7;
-
-                    using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
-                    {
-                        using (var ms = new MemoryStream())
-                        {
-                            // IVを先頭に保存
-                            ms.Write(aes.IV, 0, aes.IV.Length);
-
-                            using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
-                            {
-                                cs.Write(plaintext, 0, plaintext.Length);
-                                cs.FlushFinalBlock();
-                            }
-
-                            File.WriteAllBytes(_settingsPath, ms.ToArray());
-                        }
-                    }
-                }
+                byte[] protectedBytes = ProtectedData.Protect(plaintext, null, DataProtectionScope.CurrentUser);
+                byte[] payload = new byte[_settingsFormatHeader.Length + protectedBytes.Length];
+                Buffer.BlockCopy(_settingsFormatHeader, 0, payload, 0, _settingsFormatHeader.Length);
+                Buffer.BlockCopy(protectedBytes, 0, payload, _settingsFormatHeader.Length, protectedBytes.Length);
+                File.WriteAllBytes(_settingsPath, payload);
 
                 lock (_sync)
                 {
@@ -145,43 +131,62 @@ namespace TwitchChatOverlay.Services
 
                 byte[] encryptedData = File.ReadAllBytes(_settingsPath);
 
-                using (var aes = Aes.Create())
+                AppSettings loaded;
+                if (HasCurrentHeader(encryptedData))
                 {
-                    aes.Key = _encryptionKey;
-                    aes.Mode = CipherMode.CBC;
-                    aes.Padding = PaddingMode.PKCS7;
-
-                    // IVを抽出
-                    byte[] iv = new byte[aes.IV.Length];
-                    Array.Copy(encryptedData, 0, iv, 0, iv.Length);
-                    aes.IV = iv;
-
-                    using (var decryptor = aes.CreateDecryptor(aes.Key, aes.IV))
-                    {
-                        using (var ms = new MemoryStream(encryptedData, iv.Length, encryptedData.Length - iv.Length))
-                        {
-                            using (var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read))
-                            {
-                                using (var sr = new StreamReader(cs, Encoding.UTF8))
-                                {
-                                    string json = sr.ReadToEnd();
-                                    var settings = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
-                                    lock (_sync)
-                                    {
-                                        _cachedSettings = CloneSettings(settings);
-                                    }
-                                    return CloneSettings(settings);
-                                }
-                            }
-                        }
-                    }
+                    loaded = LoadCurrentFormat(encryptedData);
                 }
+                else
+                {
+                    loaded = LoadLegacyFormat(encryptedData);
+                    SaveSettings(loaded);
+                }
+
+                lock (_sync)
+                {
+                    _cachedSettings = CloneSettings(loaded);
+                }
+
+                return CloneSettings(loaded);
             }
             catch (Exception ex)
             {
                 LogService.Error("設定の読み込みに失敗しました", ex);
                 throw new Exception($"設定の読み込みに失敗しました: {ex.Message}", ex);
             }
+        }
+
+        private static bool HasCurrentHeader(byte[] data)
+        {
+            return data.Length > _settingsFormatHeader.Length &&
+                   data.AsSpan(0, _settingsFormatHeader.Length).SequenceEqual(_settingsFormatHeader);
+        }
+
+        private static AppSettings LoadCurrentFormat(byte[] encryptedData)
+        {
+            var protectedData = encryptedData.AsSpan(_settingsFormatHeader.Length).ToArray();
+            byte[] plaintext = ProtectedData.Unprotect(protectedData, null, DataProtectionScope.CurrentUser);
+            string json = Encoding.UTF8.GetString(plaintext);
+            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+        }
+
+        private static AppSettings LoadLegacyFormat(byte[] encryptedData)
+        {
+            using var aes = Aes.Create();
+            aes.Key = _legacyEncryptionKey;
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.PKCS7;
+
+            byte[] iv = new byte[aes.IV.Length];
+            Array.Copy(encryptedData, 0, iv, 0, iv.Length);
+            aes.IV = iv;
+
+            using var decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
+            using var ms = new MemoryStream(encryptedData, iv.Length, encryptedData.Length - iv.Length);
+            using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
+            using var sr = new StreamReader(cs, Encoding.UTF8);
+            string json = sr.ReadToEnd();
+            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
         }
 
         private static AppSettings CloneSettings(AppSettings settings)
