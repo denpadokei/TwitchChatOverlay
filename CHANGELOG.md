@@ -80,6 +80,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.3] - 2026-04-02
+
+### Fixed
+- アップデート実行時に、ダウンロード直後の ZIP ファイルを SHA256 検証する際に `IOException`（別プロセスにより使用中）が発生する不具合を修正
+  - ダウンロード用 `FileStream` / レスポンスストリームの書き込み完了後に確実に破棄してから検証処理へ進むよう変更
+  - 書き込み後に明示的にフラッシュしてから検証することで、自己ロックによる更新失敗を防止
+
+---
+
+## [0.3.2] - 2026-04-02
+
+### Added
+- Twitch リフレッシュトークンが無効 (401/400 invalid_grant 系) と判定された場合に、保存済みリフレッシュトークンを自動でクリアするように変更
+  - `TwitchTokenRefreshException` を新規追加。HTTP ステータスコードと `error`/`message` フィールドを保持し、`IsInvalidRefreshToken` で無効判定を提供
+  - `InvalidateTwitchRefreshToken()` ヘルパーメソッドを追加。サイレント更新・切断再接続・起動時の3経路すべてで共通利用
+- リフレッシュ後のアクセストークンに含まれる `expires_in` をタイマー間隔に反映
+  - `DeviceTokenResponse` に `ExpiresIn` プロパティを追加
+  - `StartTokenRefreshTimer()` が `expires_in - 600` 秒後（最小60秒・最大3時間）にリフレッシュを発動するよう動的計算に変更
+  - `expires_in` が不明な場合は従来どおり3時間をデフォルト値として使用
+- `ValidateTokenAsync()` の戻り値に `ExpiresIn` (int) を追加し、`expires_in` を応答から取得して返すように変更
+
+### Changed
+- 起動時トークン処理フローを「validate 優先、必要時のみ refresh」に変更
+  - 変更前: リフレッシュトークンが保存されていれば起動時に無条件 refresh
+  - 変更後: まず保存済みアクセストークンを validate し、有効かつ残り 600 秒以上であればそのまま接続
+  - アクセストークンが無効または残り 600 秒未満の場合のみリフレッシュトークンで refresh を試行
+  - 短時間の起動・終了繰り返しによる不要な refresh 発行を抑制
+
+---
+
 ## [0.3.1] - 2026-03-30
 
 ### Added

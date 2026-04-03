@@ -33,9 +33,11 @@ namespace TwitchChatOverlay.Services
         }
 
         /// <summary>
-        /// 保存済みトークンが有効か検証する。有効なら (true, login) を返す。
+        /// 保存済みトークンが有効か検証する。
+        /// 成功時は (true, login, userId, expiresIn) を返し、expiresIn にはトークンの残り有効期限（秒）が入る。
+        /// 失敗時は (false, null, null, 0) を返し、ExpiresIn は常に 0 となる。
         /// </summary>
-        public async Task<(bool IsValid, string Login, string UserId)> ValidateTokenAsync(string accessToken)
+        public async Task<(bool IsValid, string Login, string UserId, int ExpiresIn)> ValidateTokenAsync(string accessToken)
         {
             try
             {
@@ -44,18 +46,19 @@ namespace TwitchChatOverlay.Services
 
                 var response = await _httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
-                    return (false, null, null);
+                    return (false, null, null, 0);
 
                 var content = await response.Content.ReadAsStringAsync();
                 var json = JObject.Parse(content);
                 string login = json["login"]?.ToString();
                 string userId = json["user_id"]?.ToString();
-                return (true, login, userId);
+                int expiresIn = json["expires_in"]?.Value<int>() ?? 0;
+                return (true, login, userId, expiresIn);
             }
             catch (Exception ex)
             {
                 LogService.Warning("トークン検証中にネットワークエラーが発生しました", ex);
-                return (false, null, null);
+                return (false, null, null, 0);
             }
         }
 
