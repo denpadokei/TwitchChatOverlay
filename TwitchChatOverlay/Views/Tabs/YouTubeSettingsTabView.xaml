@@ -66,6 +66,66 @@
                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,16,8"/>
             </WrapPanel>
 
+            <Separator Margin="0,16,0,12" Background="{StaticResource BorderBrush}"/>
+
+            <TextBlock Text="🎬 OBS 連携"
+                       FontSize="13" FontWeight="Bold"
+                       Margin="0,0,0,10"
+                       Foreground="#FF3B30"/>
+
+            <CheckBox Content="OBS WebSocket 連携を有効化"
+                      IsChecked="{Binding ObsWebSocketEnabled}"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      Margin="0,0,0,10"/>
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="Host"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding ObsWebSocketHost}"
+                         IsEnabled="{Binding ObsWebSocketEnabled}"/>
+            </Grid>
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="Port"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding ObsWebSocketPort}"
+                         IsEnabled="{Binding ObsWebSocketEnabled}"/>
+            </Grid>
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="Password"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding ObsWebSocketPassword}"
+                         IsEnabled="{Binding ObsWebSocketEnabled}"/>
+            </Grid>
+
+            <TextBlock Text="OBS未利用時は接続時に1回だけ即時確認し、その後30秒間隔で配信確認します。"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       FontSize="11"
+                       Margin="0,2,0,0"/>
+
             <TextBlock Text="{Binding YouTubeStatusMessage}"
                        Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap"

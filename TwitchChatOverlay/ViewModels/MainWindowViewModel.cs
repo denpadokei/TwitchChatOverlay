@@ -50,6 +50,10 @@ namespace TwitchChatOverlay.ViewModels
         private bool _showYouTubeMembership = true;
         private string _youTubeTokenInfo = "未認可";
         private string _youTubeStatusMessage = "未接続";
+        private bool _obsWebSocketEnabled;
+        private string _obsWebSocketHost = "127.0.0.1";
+        private int _obsWebSocketPort = 4455;
+        private string _obsWebSocketPassword = "";
         private bool _regionsInitialized;
 
         public ObservableCollection<string> MonitorList { get; } = new();
@@ -367,6 +371,30 @@ namespace TwitchChatOverlay.ViewModels
         {
             get => _youTubeStatusMessage;
             set => SetProperty(ref _youTubeStatusMessage, value);
+        }
+
+        public bool ObsWebSocketEnabled
+        {
+            get => _obsWebSocketEnabled;
+            set => SetProperty(ref _obsWebSocketEnabled, value);
+        }
+
+        public string ObsWebSocketHost
+        {
+            get => _obsWebSocketHost;
+            set => SetProperty(ref _obsWebSocketHost, value);
+        }
+
+        public int ObsWebSocketPort
+        {
+            get => _obsWebSocketPort;
+            set => SetProperty(ref _obsWebSocketPort, value);
+        }
+
+        public string ObsWebSocketPassword
+        {
+            get => _obsWebSocketPassword;
+            set => SetProperty(ref _obsWebSocketPassword, value);
         }
 
         public MainWindowViewModel(
@@ -1097,6 +1125,10 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ShowYouTubeChat = ShowYouTubeChat;
                 settings.ShowYouTubeSuperChat = ShowYouTubeSuperChat;
                 settings.ShowYouTubeMembership = ShowYouTubeMembership;
+                settings.ObsWebSocketEnabled = ObsWebSocketEnabled;
+                settings.ObsWebSocketHost = ObsWebSocketHost;
+                settings.ObsWebSocketPort = ObsWebSocketPort;
+                settings.ObsWebSocketPassword = ObsWebSocketPassword;
                 settings.ToastDurationSeconds = ToastDurationSeconds;
                 settings.ToastMaxCount = ToastMaxCount;
                 settings.ToastPosition = (Services.ToastPosition)ToastPositionIndex;
@@ -1145,6 +1177,10 @@ namespace TwitchChatOverlay.ViewModels
                 ShowYouTubeChat = settings.ShowYouTubeChat;
                 ShowYouTubeSuperChat = settings.ShowYouTubeSuperChat;
                 ShowYouTubeMembership = settings.ShowYouTubeMembership;
+                ObsWebSocketEnabled = settings.ObsWebSocketEnabled;
+                ObsWebSocketHost = string.IsNullOrWhiteSpace(settings.ObsWebSocketHost) ? "127.0.0.1" : settings.ObsWebSocketHost;
+                ObsWebSocketPort = settings.ObsWebSocketPort > 0 ? settings.ObsWebSocketPort : 4455;
+                ObsWebSocketPassword = settings.ObsWebSocketPassword ?? "";
                 ToastDurationSeconds = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds : 5;
                 ToastMaxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
                 ToastPositionIndex = (int)settings.ToastPosition;

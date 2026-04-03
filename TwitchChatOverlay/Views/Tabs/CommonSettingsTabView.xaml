@@ -154,18 +154,6 @@
             </Grid>
 
             <Separator Margin="0,14,0,12" Background="{StaticResource BorderBrush}"/>
-
-            <Button Content="💾 設定を保存"
-                    Command="{Binding SaveSettingsCommand}"
-                    Width="130" Height="36"
-                    HorizontalAlignment="Left"
-                    Style="{StaticResource SuccessButtonStyle}"
-                    Margin="0,0,0,12"/>
-
-            <TextBlock Text="{Binding StatusMessage}"
-                       Foreground="{StaticResource TextSecondaryBrush}"
-                       TextWrapping="Wrap"
-                       FontSize="12"/>
         </StackPanel>
     </ScrollViewer>
 </UserControl>
