@@ -117,6 +117,7 @@ Copy-Item build/local.props.example build/local.props
   <PropertyGroup>
     <TwitchClientId>your_client_id_here</TwitchClientId>
     <YouTubeClientId>your_youtube_client_id_here</YouTubeClientId>
+    <YouTubeClientSecret>your_youtube_client_secret_here</YouTubeClientSecret>
   </PropertyGroup>
 </Project>
 ```
@@ -134,6 +135,7 @@ Copy-Item build/local.props.example build/local.props
 |------|-------|
 | `TWITCH_CLIENT_ID` | Twitch Developer Portal の Client ID |
 | `YOUTUBE_CLIENT_ID` | Google Cloud の OAuth Client ID |
+| `YOUTUBE_CLIENT_SECRET` | Google Cloud の OAuth Client Secret |
 
 ## セットアップ
 

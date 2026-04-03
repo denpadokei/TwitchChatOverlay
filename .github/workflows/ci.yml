@@ -38,6 +38,8 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
           -p:TwitchClientId=${{ secrets.TWITCH_CLIENT_ID }}
+          -p:YouTubeClientId=${{ secrets.YOUTUBE_CLIENT_ID }}
+          -p:YouTubeClientSecret=${{ secrets.YOUTUBE_CLIENT_SECRET }}
           --output ./publish/release
 
       - name: Publish Debug (self-contained, single file)
@@ -49,6 +51,8 @@ jobs:
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:TwitchClientId=${{ secrets.TWITCH_CLIENT_ID }}
+          -p:YouTubeClientId=${{ secrets.YOUTUBE_CLIENT_ID }}
+          -p:YouTubeClientSecret=${{ secrets.YOUTUBE_CLIENT_SECRET }}
           --output ./publish/debug
 
       - name: Upload Release artifact
