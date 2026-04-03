@@ -55,6 +55,10 @@ namespace TwitchChatOverlay.ViewModels
         private int _obsWebSocketPort = 4455;
         private string _obsWebSocketPassword = "";
         private bool _regionsInitialized;
+        private bool _commonSettingsRegionInitialized;
+        private bool _twitchSettingsRegionInitialized;
+        private bool _youTubeSettingsRegionInitialized;
+        private bool _regionInitializationRetryScheduled;
 
         public ObservableCollection<string> MonitorList { get; } = new();
 
@@ -532,10 +536,52 @@ namespace TwitchChatOverlay.ViewModels
             if (_regionsInitialized)
                 return;
 
-            _regionsInitialized = true;
-            regionManager.RequestNavigate(RegionNames.CommonSettingsRegion, nameof(Views.Tabs.CommonSettingsTabView));
-            regionManager.RequestNavigate(RegionNames.TwitchSettingsRegion, nameof(Views.Tabs.TwitchSettingsTabView));
-            regionManager.RequestNavigate(RegionNames.YouTubeSettingsRegion, nameof(Views.Tabs.YouTubeSettingsTabView));
+            _commonSettingsRegionInitialized |= TryInitializeRegion(
+                regionManager,
+                RegionNames.CommonSettingsRegion,
+                nameof(Views.Tabs.CommonSettingsTabView));
+            _twitchSettingsRegionInitialized |= TryInitializeRegion(
+                regionManager,
+                RegionNames.TwitchSettingsRegion,
+                nameof(Views.Tabs.TwitchSettingsTabView));
+            _youTubeSettingsRegionInitialized |= TryInitializeRegion(
+                regionManager,
+                RegionNames.YouTubeSettingsRegion,
+                nameof(Views.Tabs.YouTubeSettingsTabView));
+
+            _regionsInitialized =
+                _commonSettingsRegionInitialized &&
+                _twitchSettingsRegionInitialized &&
+                _youTubeSettingsRegionInitialized;
+
+            if (!_regionsInitialized)
+                SchedulePendingRegionInitialization(regionManager);
+        }
+
+        private bool TryInitializeRegion(IRegionManager regionManager, string regionName, string viewName)
+        {
+            if (!regionManager.Regions.ContainsRegionWithName(regionName))
+                return false;
+
+            regionManager.RequestNavigate(regionName, viewName);
+            return true;
+        }
+
+        private void SchedulePendingRegionInitialization(IRegionManager regionManager)
+        {
+            if (_regionInitializationRetryScheduled)
+                return;
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher == null)
+                return;
+
+            _regionInitializationRetryScheduled = true;
+            dispatcher.BeginInvoke(new Action(() =>
+            {
+                _regionInitializationRetryScheduled = false;
+                InitializeRegions(regionManager);
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         private async Task AutoConnectAsync()

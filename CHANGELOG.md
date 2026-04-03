@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.4.0] - 2026-04-01
+## [0.4.0] - 2026-04-03
 
 ### Added
 - MainWindow の設定UIを Prism RegionManager ベースのタブ構成へ移行

@@ -1,7 +1,8 @@
 <UserControl x:Class="TwitchChatOverlay.Views.Tabs.YouTubeSettingsTabView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Background="{StaticResource BackgroundBrush}">
+             Background="{StaticResource BackgroundBrush}"
+             Loaded="OnLoaded">
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="12,12,12,12" VerticalAlignment="Top">
             <TextBlock Text="YouTube 設定"
@@ -115,9 +116,11 @@
                            Text="Password"
                            VerticalAlignment="Center"
                            Foreground="{StaticResource TextSecondaryBrush}"/>
-                <TextBox Grid.Column="1"
-                         Text="{Binding ObsWebSocketPassword}"
-                         IsEnabled="{Binding ObsWebSocketEnabled}"/>
+                <PasswordBox x:Name="ObsPasswordBox"
+                             Grid.Column="1"
+                             Style="{StaticResource StandardPasswordBoxStyle}"
+                             IsEnabled="{Binding ObsWebSocketEnabled}"
+                             PasswordChanged="OnObsPasswordChanged"/>
             </Grid>
 
             <TextBlock Text="OBS未利用時は接続時に1回だけ即時確認し、その後30秒間隔で配信確認します。"

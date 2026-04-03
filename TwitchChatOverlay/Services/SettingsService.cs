@@ -172,21 +172,31 @@ namespace TwitchChatOverlay.Services
 
         private static AppSettings LoadLegacyFormat(byte[] encryptedData)
         {
-            using var aes = Aes.Create();
-            aes.Key = _legacyEncryptionKey;
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.PKCS7;
+            try
+            {
+                using var aes = Aes.Create();
+                aes.Key = _legacyEncryptionKey;
+                aes.Mode = CipherMode.CBC;
+                aes.Padding = PaddingMode.PKCS7;
 
-            byte[] iv = new byte[aes.IV.Length];
-            Array.Copy(encryptedData, 0, iv, 0, iv.Length);
-            aes.IV = iv;
+                if (encryptedData == null || encryptedData.Length < aes.IV.Length)
+                    return new AppSettings();
 
-            using var decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
-            using var ms = new MemoryStream(encryptedData, iv.Length, encryptedData.Length - iv.Length);
-            using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
-            using var sr = new StreamReader(cs, Encoding.UTF8);
-            string json = sr.ReadToEnd();
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+                byte[] iv = new byte[aes.IV.Length];
+                Array.Copy(encryptedData, 0, iv, 0, iv.Length);
+                aes.IV = iv;
+
+                using var decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
+                using var ms = new MemoryStream(encryptedData, iv.Length, encryptedData.Length - iv.Length);
+                using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
+                using var sr = new StreamReader(cs, Encoding.UTF8);
+                string json = sr.ReadToEnd();
+                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            }
+            catch (Exception ex) when (ex is CryptographicException or JsonException or IOException or ArgumentException)
+            {
+                return new AppSettings();
+            }
         }
 
         private static AppSettings CloneSettings(AppSettings settings)

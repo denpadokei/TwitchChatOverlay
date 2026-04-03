@@ -161,9 +161,9 @@ Copy-Item build/local.props.example build/local.props
 
 1. ブラウザでGoogle認可画面が開きます
 2. 権限を許可するとローカルコールバックでトークンを保存します
-3. YouTubeの接続先（チャンネルID / ハンドル）を入力して **「▶ 接続」** を押します
+3. 認可が完了したら **「▶ 接続」** を押します
 
-> YouTubeは配信中（liveBroadcast active）の liveChatId が必要です。配信が開始されていない場合は接続できません。
+> YouTubeは配信中（liveBroadcast active）の liveChatId が必要です。配信がまだ開始されていない場合は、配信開始まで待機しながらポーリングで接続を試行します。
 
 ### 4. Google Cloud 側の設定
 
