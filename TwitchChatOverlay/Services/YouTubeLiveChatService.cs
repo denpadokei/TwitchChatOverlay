@@ -4,8 +4,11 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
+using Grpc.Core;
+using Grpc.Net.Client;
 using Newtonsoft.Json.Linq;
 using TwitchChatOverlay.Models;
+using TwitchChatOverlay.YouTube.LiveChat.V3;
 
 namespace TwitchChatOverlay.Services
 {
@@ -27,10 +30,29 @@ namespace TwitchChatOverlay.Services
         public string Message { get; init; }
     }
 
+    public class YouTubeWaitingForBroadcastEventArgs : EventArgs
+    {
+        public string Message { get; init; }
+    }
+
     public class YouTubeLiveChatService
     {
         private static readonly HttpClient Http = new();
+        private static readonly SocketsHttpHandler GrpcHttpHandler = new()
+        {
+            EnableMultipleHttp2Connections = true
+        };
+        private static readonly GrpcChannel GrpcChannel = GrpcChannel.ForAddress(
+            "https://youtube.googleapis.com",
+            new GrpcChannelOptions
+            {
+                HttpHandler = GrpcHttpHandler
+            });
+        private static readonly V3DataLiveChatMessageService.V3DataLiveChatMessageServiceClient GrpcClient =
+            new(GrpcChannel);
         private const int BroadcastPollIntervalMs = 30_000;
+        private const int GrpcProfileImageSize = 88;
+        private const int StreamMaxResults = 500;
         private const int MessageCacheSize = 5000;
 
         private readonly HashSet<string> _seenMessageIds = new();
@@ -38,11 +60,13 @@ namespace TwitchChatOverlay.Services
         private CancellationTokenSource _cts;
         private string _accessToken;
         private string _liveChatId;
+        private string _resumePageToken;
         private bool _broadcastPollingPending;
 
         public event EventHandler<OverlayNotification> NotificationReceived;
         public event EventHandler<YouTubeConnectionLostEventArgs> ConnectionLost;
         public event EventHandler BroadcastDetected;
+        public event EventHandler<YouTubeWaitingForBroadcastEventArgs> WaitingForBroadcastStarted;
         public bool IsConnected { get; private set; }
         public bool IsWaitingForBroadcast { get; private set; }
 
@@ -58,6 +82,8 @@ namespace TwitchChatOverlay.Services
 
             Disconnect();
             _accessToken = accessToken;
+            _liveChatId = null;
+            _resumePageToken = null;
             _seenMessageIds.Clear();
             _seenMessageOrder.Clear();
             _cts = new CancellationTokenSource();
@@ -66,23 +92,19 @@ namespace TwitchChatOverlay.Services
             _liveChatId = checkImmediately ? await ResolveLiveChatIdAsync(_cts.Token) : null;
             if (string.IsNullOrWhiteSpace(_liveChatId))
             {
-                IsWaitingForBroadcast = true;
-                _broadcastPollingPending = true;
-
                 if (waitForObsSignalBeforePolling)
                 {
-                    LogService.Info("YouTube 配信待機中です。OBS の配信開始検出後に30秒ポーリングを開始します。");
+                    EnterWaitingForBroadcast(startPollingImmediately: false, "YouTube 配信待機中です。OBS の配信開始検出後に30秒間隔の配信確認を開始します。");
                 }
                 else
                 {
-                    LogService.Info("YouTube 配信が見つかりません。30秒ごとの配信確認を開始します。");
-                    StartBroadcastPolling();
+                    EnterWaitingForBroadcast(startPollingImmediately: true, "YouTube 配信が見つかりません。30秒間隔で配信確認を続行します。");
                 }
                 return;
             }
 
             IsConnected = true;
-            _ = Task.Run(() => PollLoopAsync(_cts.Token));
+            _ = Task.Run(() => StreamLoopAsync(_cts.Token));
             LogService.Info($"YouTube Live Chat 接続開始: liveChatId={_liveChatId}");
         }
 
@@ -96,11 +118,32 @@ namespace TwitchChatOverlay.Services
             LogService.Info("YouTube 配信待機ポーリングを開始しました（30秒間隔）");
         }
 
+        private void EnterWaitingForBroadcast(bool startPollingImmediately, string message)
+        {
+            IsConnected = false;
+            IsWaitingForBroadcast = true;
+            _liveChatId = null;
+            _resumePageToken = null;
+            _broadcastPollingPending = true;
+
+            LogService.Info(message);
+            WaitingForBroadcastStarted?.Invoke(this, new YouTubeWaitingForBroadcastEventArgs
+            {
+                Message = message
+            });
+
+            if (startPollingImmediately)
+                StartBroadcastPolling();
+        }
+
         public void Disconnect()
         {
             _cts?.Cancel();
             _cts?.Dispose();
             _cts = null;
+            _accessToken = null;
+            _liveChatId = null;
+            _resumePageToken = null;
             IsConnected = false;
             IsWaitingForBroadcast = false;
             _broadcastPollingPending = false;
@@ -131,9 +174,10 @@ namespace TwitchChatOverlay.Services
                     {
                         IsWaitingForBroadcast = false;
                         IsConnected = true;
+                        _resumePageToken = null;
                         LogService.Info($"YouTube 配信を検出しました: liveChatId={_liveChatId}");
                         BroadcastDetected?.Invoke(this, EventArgs.Empty);
-                        await PollLoopAsync(cancellationToken);
+                        await StreamLoopAsync(cancellationToken);
                         return;
                     }
                     LogService.Info("YouTube 配信中のブロードキャストが見つかりません。再試行します...");
@@ -194,75 +238,82 @@ namespace TwitchChatOverlay.Services
             return null;
         }
 
-        private async Task PollLoopAsync(CancellationToken cancellationToken)
+        private async Task StreamLoopAsync(CancellationToken cancellationToken)
         {
-            string pageToken = null;
-            int intervalMs = 5000;
             long failureCount = 0;
 
             try
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    string url = "https://www.googleapis.com/youtube/v3/liveChat/messages" +
-                                 $"?liveChatId={Uri.EscapeDataString(_liveChatId)}" +
-                                 "&part=snippet,authorDetails" +
-                                 "&maxResults=200";
-                    if (!string.IsNullOrEmpty(pageToken))
-                        url += $"&pageToken={Uri.EscapeDataString(pageToken)}";
-
-                    var req = new HttpRequestMessage(HttpMethod.Get, url);
-                    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
-                    var res = await Http.SendAsync(req, cancellationToken);
-                    string json = await res.Content.ReadAsStringAsync(cancellationToken);
-
-                    if (!res.IsSuccessStatusCode)
+                    try
                     {
-                        int statusCode = (int)res.StatusCode;
-                        if (statusCode == 401)
-                            throw new YouTubeApiException(statusCode, $"YouTube liveChat poll失敗: {statusCode} {json}", GetRetryAfter(res));
+                        using var call = GrpcClient.StreamList(
+                            CreateStreamRequest(),
+                            headers: CreateGrpcHeaders(),
+                            cancellationToken: cancellationToken);
 
-                        var delay = CalculateBackoffDelay(++failureCount, GetRetryAfter(res));
-                        LogService.Warning($"YouTube liveChat poll失敗: {statusCode}。{delay.TotalSeconds:F1}秒後に再試行します");
+                        LogService.Info($"YouTube Live Chat gRPC ストリーム開始: liveChatId={_liveChatId}");
+
+                        bool receivedResponse = false;
+                        while (await call.ResponseStream.MoveNext(cancellationToken))
+                        {
+                            receivedResponse = true;
+                            failureCount = 0;
+
+                            var response = call.ResponseStream.Current;
+                            if (!string.IsNullOrWhiteSpace(response.NextPageToken))
+                                _resumePageToken = response.NextPageToken;
+
+                            foreach (var item in response.Items)
+                            {
+                                string messageId = item.Id;
+                                if (string.IsNullOrEmpty(messageId) || _seenMessageIds.Contains(messageId))
+                                    continue;
+
+                                AddSeenMessageId(messageId);
+
+                                var notification = BuildNotification(item);
+                                if (notification != null)
+                                    NotificationReceived?.Invoke(this, notification);
+                            }
+
+                            if (!string.IsNullOrWhiteSpace(response.OfflineAt))
+                                throw new YouTubeApiException(410, $"YouTube 配信が終了しました: offlineAt={response.OfflineAt}");
+                        }
+
+                        if (!receivedResponse)
+                            throw new YouTubeApiException(502, "YouTube Live Chat gRPC ストリームが応答なしで終了しました。");
+
+                        var closedDelay = CalculateBackoffDelay(++failureCount, null);
+                        LogService.Warning($"YouTube Live Chat gRPC ストリームが終了しました。{closedDelay.TotalSeconds:F1}秒後に再接続します");
+                        await Task.Delay(closedDelay, cancellationToken);
+                    }
+                    catch (RpcException rpcEx) when (rpcEx.StatusCode != StatusCode.Cancelled)
+                    {
+                        var apiEx = ConvertToYouTubeApiException(rpcEx);
+                        if (ShouldResumeBroadcastWait(apiEx))
+                        {
+                            EnterWaitingForBroadcast(startPollingImmediately: true, "YouTube 配信が終了または未検出になったため、30秒間隔の配信待機に戻ります。");
+                            return;
+                        }
+
+                        if (ShouldBubbleStreamException(apiEx))
+                            throw apiEx;
+
+                        var delay = CalculateBackoffDelay(++failureCount, apiEx.RetryAfter);
+                        LogService.Warning($"YouTube Live Chat gRPC 受信失敗: {apiEx.StatusCode}。{delay.TotalSeconds:F1}秒後に再接続します");
                         await Task.Delay(delay, cancellationToken);
-                        continue;
                     }
-
-                    failureCount = 0;
-
-                    var obj = JObject.Parse(json);
-                    pageToken = obj["nextPageToken"]?.ToString();
-                    intervalMs = obj["pollingIntervalMillis"]?.Value<int>() ?? 5000;
-
-                    if (obj["items"] is not JArray items)
-                    {
-                        await Task.Delay(intervalMs, cancellationToken);
-                        continue;
-                    }
-
-                    foreach (var item in items)
-                    {
-                        string messageId = item["id"]?.ToString();
-                        if (string.IsNullOrEmpty(messageId) || _seenMessageIds.Contains(messageId))
-                            continue;
-
-                        AddSeenMessageId(messageId);
-
-                        var notification = BuildNotification(item);
-                        if (notification != null)
-                            NotificationReceived?.Invoke(this, notification);
-                    }
-
-                    await Task.Delay(intervalMs, cancellationToken);
                 }
             }
             catch (OperationCanceledException)
             {
-                LogService.Info("YouTube Live Chat ポーリング終了（キャンセル）");
+                LogService.Info("YouTube Live Chat gRPC ストリーム終了（キャンセル）");
             }
             catch (Exception ex)
             {
-                LogService.Error("YouTube Live Chat ポーリングエラー", ex);
+                LogService.Error("YouTube Live Chat gRPC ストリームエラー", ex);
 
                 if (!cancellationToken.IsCancellationRequested)
                 {
@@ -279,6 +330,31 @@ namespace TwitchChatOverlay.Services
             {
                 IsConnected = false;
             }
+        }
+
+        private LiveChatMessageListRequest CreateStreamRequest()
+        {
+            var request = new LiveChatMessageListRequest
+            {
+                LiveChatId = _liveChatId,
+                ProfileImageSize = GrpcProfileImageSize,
+                MaxResults = StreamMaxResults
+            };
+
+            if (!string.IsNullOrWhiteSpace(_resumePageToken))
+                request.PageToken = _resumePageToken;
+
+            request.Part.Add("snippet");
+            request.Part.Add("authorDetails");
+            return request;
+        }
+
+        private Metadata CreateGrpcHeaders()
+        {
+            return new Metadata
+            {
+                { "authorization", $"Bearer {_accessToken}" }
+            };
         }
 
         private void AddSeenMessageId(string messageId)
@@ -324,15 +400,46 @@ namespace TwitchChatOverlay.Services
             return null;
         }
 
-        private static OverlayNotification BuildNotification(JToken item)
+        private static bool ShouldBubbleStreamException(YouTubeApiException exception)
         {
-            string type = item["snippet"]?["type"]?.ToString() ?? "textMessageEvent";
-            string username = item["authorDetails"]?["displayName"]?.ToString() ?? "YouTubeUser";
-            string message = item["snippet"]?["displayMessage"]?.ToString() ?? string.Empty;
+            return exception.StatusCode is 401 or 403;
+        }
 
-            return type switch
+        private static bool ShouldResumeBroadcastWait(YouTubeApiException exception)
+        {
+            return exception.StatusCode is 404 or 410 or 412;
+        }
+
+        private static YouTubeApiException ConvertToYouTubeApiException(RpcException exception)
+        {
+            int statusCode = exception.StatusCode switch
             {
-                "textMessageEvent" => new OverlayNotification
+                StatusCode.Unauthenticated => 401,
+                StatusCode.PermissionDenied => 403,
+                StatusCode.InvalidArgument => 400,
+                StatusCode.NotFound => 404,
+                StatusCode.FailedPrecondition => 412,
+                StatusCode.ResourceExhausted => 429,
+                StatusCode.Unavailable => 503,
+                StatusCode.DeadlineExceeded => 504,
+                _ => 500
+            };
+
+            return new YouTubeApiException(statusCode, $"YouTube liveChat stream失敗: {exception.StatusCode} {exception.Status.Detail}");
+        }
+
+        private static OverlayNotification BuildNotification(LiveChatMessage item)
+        {
+            var snippet = item.Snippet;
+            if (snippet == null)
+                return null;
+
+            string username = item.AuthorDetails?.DisplayName ?? "YouTubeUser";
+            string message = snippet.DisplayMessage ?? string.Empty;
+
+            return snippet.Type switch
+            {
+                LiveChatMessageSnippet.Types.Type.TextMessageEvent => new OverlayNotification
                 {
                     SourcePlatform = "YouTube",
                     Type = NotificationType.Chat,
@@ -341,21 +448,27 @@ namespace TwitchChatOverlay.Services
                     Fragments = new List<object> { new TextFragment { Text = message } },
                     UserColor = "#FFFFFF"
                 },
-                "superChatEvent" => new OverlayNotification
+                LiveChatMessageSnippet.Types.Type.SuperChatEvent => new OverlayNotification
                 {
                     SourcePlatform = "YouTube",
                     Type = NotificationType.Reward,
                     Username = username,
-                    DisplayText = "Super Chat",
-                    SubText = message
+                    DisplayText = string.IsNullOrWhiteSpace(snippet.SuperChatDetails?.AmountDisplayString)
+                        ? "Super Chat"
+                        : snippet.SuperChatDetails.AmountDisplayString,
+                    SubText = string.IsNullOrWhiteSpace(snippet.SuperChatDetails?.UserComment)
+                        ? message
+                        : snippet.SuperChatDetails.UserComment
                 },
-                "newSponsorEvent" or "memberMilestoneChatEvent" => new OverlayNotification
+                LiveChatMessageSnippet.Types.Type.NewSponsorEvent or LiveChatMessageSnippet.Types.Type.MemberMilestoneChatEvent => new OverlayNotification
                 {
                     SourcePlatform = "YouTube",
                     Type = NotificationType.Subscribe,
                     Username = username,
                     DisplayText = "メンバーシップ",
-                    SubText = message
+                    SubText = string.IsNullOrWhiteSpace(message)
+                        ? snippet.MemberMilestoneChatDetails?.UserComment ?? snippet.NewSponsorDetails?.MemberLevelName ?? string.Empty
+                        : message
                 },
                 _ => null
             };

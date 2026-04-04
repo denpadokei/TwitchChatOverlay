@@ -442,6 +442,7 @@ namespace TwitchChatOverlay.ViewModels
             _eventSubService.ConnectionLost += OnConnectionLost;
             _youTubeLiveChatService.ConnectionLost += OnYouTubeConnectionLost;
             _youTubeLiveChatService.BroadcastDetected += OnYouTubeBroadcastDetected;
+            _youTubeLiveChatService.WaitingForBroadcastStarted += OnYouTubeWaitingForBroadcastStarted;
             _obsWebSocketService.StreamingStateChanged += OnObsStreamingStateChanged;
 
             // モニター一覧を構築
@@ -487,8 +488,8 @@ namespace TwitchChatOverlay.ViewModels
                     checkImmediately: !waitForObsSignal,
                     waitForObsSignalBeforePolling: waitForObsSignal);
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
-                    ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
-                    : "✅ YouTube自動接続完了";
+                    ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                    : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
 
                 settings.YouTubeAutoConnectEnabled = true;
                 _settingsService.SaveSettings(settings);
@@ -517,8 +518,8 @@ namespace TwitchChatOverlay.ViewModels
                         checkImmediately: !waitForObsSignal,
                         waitForObsSignalBeforePolling: waitForObsSignal);
                     YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
-                        ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
-                        : "✅ YouTube自動接続完了";
+                        ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                        : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
 
                     settings.YouTubeAutoConnectEnabled = true;
                     _settingsService.SaveSettings(settings);
@@ -1317,8 +1318,8 @@ namespace TwitchChatOverlay.ViewModels
                 }
 
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
-                    ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
-                    : "✅ YouTube Live Chat 接続完了";
+                    ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                    : BuildYouTubeConnectedMessage("✅ YouTube Live Chat 接続完了");
                 StartYouTubeTokenRefreshTimer();
             }
             catch (Exception ex)
@@ -1374,8 +1375,8 @@ namespace TwitchChatOverlay.ViewModels
                     checkImmediately: !waitForObsSignal,
                     waitForObsSignalBeforePolling: waitForObsSignal);
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
-                    ? "⏳ 配信開始を待機中... (30秒ごとに確認)"
-                    : "✅ YouTube再接続完了";
+                    ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                    : BuildYouTubeConnectedMessage("✅ YouTube再接続完了");
                 StartYouTubeTokenRefreshTimer();
             }
             catch (Exception ex)
@@ -1427,9 +1428,32 @@ namespace TwitchChatOverlay.ViewModels
         {
             Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
-                YouTubeStatusMessage = "✅ YouTube Live Chat 接続完了";
+                YouTubeStatusMessage = BuildYouTubeConnectedMessage("✅ YouTube Live Chat 接続完了");
                 StartYouTubeTokenRefreshTimer();
             });
+        }
+
+        private void OnYouTubeWaitingForBroadcastStarted(object sender, YouTubeWaitingForBroadcastEventArgs e)
+        {
+            var settings = _settingsService.LoadSettings();
+            bool useObsForDetection = settings.ObsWebSocketEnabled && _obsWebSocketService.IsConnected;
+
+            Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                YouTubeStatusMessage = BuildYouTubeWaitingMessage(useObsForDetection);
+            });
+        }
+
+        private static string BuildYouTubeConnectedMessage(string prefix)
+        {
+            return $"{prefix} (gRPC ストリーム受信中)";
+        }
+
+        private static string BuildYouTubeWaitingMessage(bool waitForObsSignal)
+        {
+            return waitForObsSignal
+                ? "⏳ 配信開始を待機中... (OBS の開始検出後に YouTube 配信確認)"
+                : "⏳ 配信開始を待機中... (30秒間隔で配信確認)";
         }
 
         private static bool IsYouTubeUnauthorized(Exception ex)
