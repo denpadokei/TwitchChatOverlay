@@ -156,7 +156,6 @@ namespace TwitchChatOverlay.Services
             {
                 while (!cancellationToken.IsCancellationRequested)
                 {
-                    await Task.Delay(BroadcastPollIntervalMs, cancellationToken);
                     try
                     {
                         _liveChatId = await ResolveLiveChatIdAsync(cancellationToken);
@@ -181,6 +180,7 @@ namespace TwitchChatOverlay.Services
                         return;
                     }
                     LogService.Info("YouTube 配信中のブロードキャストが見つかりません。再試行します...");
+                    await Task.Delay(BroadcastPollIntervalMs, cancellationToken);
                 }
             }
             catch (OperationCanceledException)

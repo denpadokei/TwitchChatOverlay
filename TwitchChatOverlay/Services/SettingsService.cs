@@ -164,10 +164,18 @@ namespace TwitchChatOverlay.Services
 
         private static AppSettings LoadCurrentFormat(byte[] encryptedData)
         {
-            var protectedData = encryptedData.AsSpan(_settingsFormatHeader.Length).ToArray();
-            byte[] plaintext = ProtectedData.Unprotect(protectedData, null, DataProtectionScope.CurrentUser);
-            string json = Encoding.UTF8.GetString(plaintext);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            try
+            {
+                var protectedData = encryptedData.AsSpan(_settingsFormatHeader.Length).ToArray();
+                byte[] plaintext = ProtectedData.Unprotect(protectedData, null, DataProtectionScope.CurrentUser);
+                string json = Encoding.UTF8.GetString(plaintext);
+                return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
+            }
+            catch (Exception ex) when (ex is CryptographicException or JsonException or IOException or ArgumentException)
+            {
+                LogService.Warning($"設定ファイルの読み込みに失敗しました。デフォルト設定で起動します。: {ex.Message}");
+                return new AppSettings();
+            }
         }
 
         private static AppSettings LoadLegacyFormat(byte[] encryptedData)
@@ -195,6 +203,7 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception ex) when (ex is CryptographicException or JsonException or IOException or ArgumentException)
             {
+                LogService.Warning($"旧形式設定ファイルの読み込みに失敗しました。デフォルト設定で起動します。: {ex.Message}");
                 return new AppSettings();
             }
         }

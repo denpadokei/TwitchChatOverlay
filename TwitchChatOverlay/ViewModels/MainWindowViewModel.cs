@@ -490,6 +490,8 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? BuildYouTubeWaitingMessage(waitForObsSignal)
                     : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
+                if (!_youTubeLiveChatService.IsWaitingForBroadcast)
+                    StartYouTubeTokenRefreshTimer();
 
                 settings.YouTubeAutoConnectEnabled = true;
                 _settingsService.SaveSettings(settings);
@@ -520,6 +522,8 @@ namespace TwitchChatOverlay.ViewModels
                     YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                         ? BuildYouTubeWaitingMessage(waitForObsSignal)
                         : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
+                    if (!_youTubeLiveChatService.IsWaitingForBroadcast)
+                        StartYouTubeTokenRefreshTimer();
 
                     settings.YouTubeAutoConnectEnabled = true;
                     _settingsService.SaveSettings(settings);
