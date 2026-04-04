@@ -3,8 +3,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using Prism.Ioc;
 using TwitchChatOverlay.Services;
+using TwitchChatOverlay.ViewModels;
 using TwitchChatOverlay.Views;
-using TwitchChatOverlay.Views.Tabs;
 
 namespace TwitchChatOverlay
 {
@@ -68,10 +68,10 @@ namespace TwitchChatOverlay
             containerRegistry.RegisterSingleton<ObsWebSocketService>();
             containerRegistry.RegisterInstance<YouTubeOAuthService>(new YouTubeOAuthService(BuildSecrets.YouTubeClientSecret));
             containerRegistry.RegisterSingleton<YouTubeLiveChatService>();
-
-            containerRegistry.RegisterForNavigation<CommonSettingsTabView>();
-            containerRegistry.RegisterForNavigation<TwitchSettingsTabView>();
-            containerRegistry.RegisterForNavigation<YouTubeSettingsTabView>();
+            containerRegistry.RegisterSingleton<MainWindowViewModel>();
+            containerRegistry.Register<CommonSettingsTabViewModel>();
+            containerRegistry.Register<TwitchSettingsTabViewModel>();
+            containerRegistry.Register<YouTubeSettingsTabViewModel>();
         }
     }
 }

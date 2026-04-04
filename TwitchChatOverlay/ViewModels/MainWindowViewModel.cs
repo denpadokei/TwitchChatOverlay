@@ -7,8 +7,6 @@ using System.Windows.Input;
 using Microsoft.Win32;
 using Prism.Commands;
 using Prism.Mvvm;
-using Prism.Regions;
-using TwitchChatOverlay.Infrastructure;
 using TwitchChatOverlay.Models;
 using TwitchChatOverlay.Services;
 using WinForms = System.Windows.Forms;
@@ -61,11 +59,6 @@ namespace TwitchChatOverlay.ViewModels
         private string _obsWebSocketHost = "127.0.0.1";
         private int _obsWebSocketPort = 4455;
         private string _obsWebSocketPassword = "";
-        private bool _regionsInitialized;
-        private bool _commonSettingsRegionInitialized;
-        private bool _twitchSettingsRegionInitialized;
-        private bool _youTubeSettingsRegionInitialized;
-        private bool _regionInitializationRetryScheduled;
 
         public ObservableCollection<string> MonitorList { get; } = new();
     public ObservableCollection<AudioOutputDeviceOption> AudioOutputDevices { get; } = new();
@@ -533,6 +526,7 @@ namespace TwitchChatOverlay.ViewModels
             {
                 if (!string.IsNullOrEmpty(settings.YouTubeTokenInfo))
                     YouTubeTokenInfo = settings.YouTubeTokenInfo;
+
                 YouTubeStatusMessage = "未接続";
                 return;
             }
@@ -559,7 +553,7 @@ namespace TwitchChatOverlay.ViewModels
             {
                 if (string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
                 {
-                    YouTubeStatusMessage = "YouTube自動接続に失敗しました（再認可が必要）";
+                    YouTubeStatusMessage = "YouTube自動接続に失敗しました（再認可してください）";
                     return;
                 }
 
@@ -593,59 +587,6 @@ namespace TwitchChatOverlay.ViewModels
                     YouTubeStatusMessage = "YouTube自動接続に失敗しました（手動接続してください）";
                 }
             }
-        }
-
-        public void InitializeRegions(IRegionManager regionManager)
-        {
-            if (_regionsInitialized)
-                return;
-
-            _commonSettingsRegionInitialized |= TryInitializeRegion(
-                regionManager,
-                RegionNames.CommonSettingsRegion,
-                nameof(Views.Tabs.CommonSettingsTabView));
-            _twitchSettingsRegionInitialized |= TryInitializeRegion(
-                regionManager,
-                RegionNames.TwitchSettingsRegion,
-                nameof(Views.Tabs.TwitchSettingsTabView));
-            _youTubeSettingsRegionInitialized |= TryInitializeRegion(
-                regionManager,
-                RegionNames.YouTubeSettingsRegion,
-                nameof(Views.Tabs.YouTubeSettingsTabView));
-
-            _regionsInitialized =
-                _commonSettingsRegionInitialized &&
-                _twitchSettingsRegionInitialized &&
-                _youTubeSettingsRegionInitialized;
-
-            if (!_regionsInitialized)
-                SchedulePendingRegionInitialization(regionManager);
-        }
-
-        private bool TryInitializeRegion(IRegionManager regionManager, string regionName, string viewName)
-        {
-            if (!regionManager.Regions.ContainsRegionWithName(regionName))
-                return false;
-
-            regionManager.RequestNavigate(regionName, viewName);
-            return true;
-        }
-
-        private void SchedulePendingRegionInitialization(IRegionManager regionManager)
-        {
-            if (_regionInitializationRetryScheduled)
-                return;
-
-            var dispatcher = Application.Current?.Dispatcher;
-            if (dispatcher == null)
-                return;
-
-            _regionInitializationRetryScheduled = true;
-            dispatcher.BeginInvoke(new Action(() =>
-            {
-                _regionInitializationRetryScheduled = false;
-                InitializeRegions(regionManager);
-            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         private async Task AutoConnectAsync()
