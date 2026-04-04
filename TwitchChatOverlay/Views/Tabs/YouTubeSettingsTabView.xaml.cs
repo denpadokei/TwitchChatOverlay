@@ -6,19 +6,23 @@ namespace TwitchChatOverlay.Views.Tabs
     {
         public YouTubeSettingsTabView()
         {
-            InitializeComponent();
+            this.InitializeComponent();
         }
 
         private void OnLoaded(object sender, System.Windows.RoutedEventArgs e)
         {
-            if (DataContext is ViewModels.YouTubeSettingsTabViewModel vm)
-                ObsPasswordBox.Password = vm.ObsWebSocketPassword;
+            if (this.DataContext is ViewModels.YouTubeSettingsTabViewModel vm)
+            {
+                this.ObsPasswordBox.Password = vm.ObsWebSocketPassword;
+            }
         }
 
         private void OnObsPasswordChanged(object sender, System.Windows.RoutedEventArgs e)
         {
-            if (DataContext is ViewModels.YouTubeSettingsTabViewModel vm)
-                vm.ObsWebSocketPassword = ObsPasswordBox.Password;
+            if (this.DataContext is ViewModels.YouTubeSettingsTabViewModel vm)
+            {
+                vm.ObsWebSocketPassword = this.ObsPasswordBox.Password;
+            }
         }
     }
 }

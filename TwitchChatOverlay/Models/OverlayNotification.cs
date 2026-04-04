@@ -26,9 +26,9 @@ namespace TwitchChatOverlay.Models
         public string SubText { get; set; }
         public string UserColor { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.Now;
-        public List<object> Fragments { get; set; } = new();
+        public List<object> Fragments { get; set; } = [];
 
-        public string TypeIcon => Type switch
+        public string TypeIcon => this.Type switch
         {
             NotificationType.Chat => "💬",
             NotificationType.Reward => "🎁",
@@ -42,7 +42,7 @@ namespace TwitchChatOverlay.Models
             _ => "💬"
         };
 
-        public Color ThemeColor => Type switch
+        public Color ThemeColor => this.Type switch
         {
             NotificationType.Chat => Color.FromRgb(255, 255, 255),
             NotificationType.Reward => Color.FromRgb(255, 215, 0),

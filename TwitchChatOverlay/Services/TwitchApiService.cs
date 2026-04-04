@@ -1,10 +1,10 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace TwitchChatOverlay.Services
 {
@@ -18,18 +18,17 @@ namespace TwitchChatOverlay.Services
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             request.Headers.Add("Client-Id", clientId);
 
-            var response = await _httpClient.SendAsync(request);
+            var response = await this._httpClient.SendAsync(request);
             var content = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
+            {
                 throw new Exception($"ユーザー情報の取得に失敗: {content}");
+            }
 
             var json = JObject.Parse(content);
             var data = json["data"]?[0];
-            if (data == null)
-                throw new Exception("ユーザー情報が見つかりません");
-
-            return (data["id"]!.ToString(), data["login"]!.ToString());
+            return data == null ? throw new Exception("ユーザー情報が見つかりません") : ((string UserId, string Login))(data["id"]!.ToString(), data["login"]!.ToString());
         }
 
         /// <summary>
@@ -44,15 +43,17 @@ namespace TwitchChatOverlay.Services
                 var request = new HttpRequestMessage(HttpMethod.Get, "https://id.twitch.tv/oauth2/validate");
                 request.Headers.Authorization = new AuthenticationHeaderValue("OAuth", accessToken);
 
-                var response = await _httpClient.SendAsync(request);
+                var response = await this._httpClient.SendAsync(request);
                 if (!response.IsSuccessStatusCode)
+                {
                     return (false, null, null, 0);
+                }
 
                 var content = await response.Content.ReadAsStringAsync();
                 var json = JObject.Parse(content);
-                string login = json["login"]?.ToString();
-                string userId = json["user_id"]?.ToString();
-                int expiresIn = json["expires_in"]?.Value<int>() ?? 0;
+                var login = json["login"]?.ToString();
+                var userId = json["user_id"]?.ToString();
+                var expiresIn = json["expires_in"]?.Value<int>() ?? 0;
                 return (true, login, userId, expiresIn);
             }
             catch (Exception ex)
@@ -117,7 +118,7 @@ namespace TwitchChatOverlay.Services
 
             foreach (var sub in subscriptions)
             {
-                await CreateSingleSubscriptionAsync(accessToken, clientId, sessionId, sub.type, sub.version, sub.condition, broadcasterUserId, userId);
+                await this.CreateSingleSubscriptionAsync(accessToken, clientId, sessionId, sub.type, sub.version, sub.condition, broadcasterUserId, userId);
             }
         }
 
@@ -170,13 +171,15 @@ namespace TwitchChatOverlay.Services
             request.Headers.Add("Client-Id", clientId);
             request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.SendAsync(request);
+            var response = await this._httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync();
                 // 409 Conflict (既に存在) は無視する
                 if ((int)response.StatusCode != 409)
+                {
                     throw new Exception($"EventSubサブスクリプション作成失敗 ({type}): {error}");
+                }
             }
         }
     }

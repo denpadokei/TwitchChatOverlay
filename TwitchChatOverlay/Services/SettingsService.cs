@@ -1,8 +1,8 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Security.Cryptography;
 
 namespace TwitchChatOverlay.Services
 {
@@ -65,7 +65,7 @@ namespace TwitchChatOverlay.Services
         public string ObsWebSocketHost { get; set; } = "127.0.0.1";
         public int ObsWebSocketPort { get; set; } = 4455;
         public string ObsWebSocketPassword { get; set; } = "";
-        public System.Collections.Generic.List<string> RecentChannels { get; set; } = new();
+        public System.Collections.Generic.List<string> RecentChannels { get; set; } = [];
     }
 
     public class SettingsService
@@ -78,10 +78,10 @@ namespace TwitchChatOverlay.Services
 
         public SettingsService()
         {
-            string appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string appFolder = Path.Combine(appDataPath, "TwitchChatOverlay");
-            Directory.CreateDirectory(appFolder);
-            _settingsPath = Path.Combine(appFolder, "settings.json");
+            var appDataPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var appFolder = Path.Combine(appDataPath, "TwitchChatOverlay");
+            _ = Directory.CreateDirectory(appFolder);
+            this._settingsPath = Path.Combine(appFolder, "settings.json");
         }
 
         /// <summary>
@@ -92,17 +92,17 @@ namespace TwitchChatOverlay.Services
             try
             {
                 var target = settings ?? new AppSettings();
-                string json = JsonSerializer.Serialize(target);
-                byte[] plaintext = Encoding.UTF8.GetBytes(json);
-                byte[] protectedBytes = ProtectedData.Protect(plaintext, null, DataProtectionScope.CurrentUser);
-                byte[] payload = new byte[_settingsFormatHeader.Length + protectedBytes.Length];
+                var json = JsonSerializer.Serialize(target);
+                var plaintext = Encoding.UTF8.GetBytes(json);
+                var protectedBytes = ProtectedData.Protect(plaintext, null, DataProtectionScope.CurrentUser);
+                var payload = new byte[_settingsFormatHeader.Length + protectedBytes.Length];
                 Buffer.BlockCopy(_settingsFormatHeader, 0, payload, 0, _settingsFormatHeader.Length);
                 Buffer.BlockCopy(protectedBytes, 0, payload, _settingsFormatHeader.Length, protectedBytes.Length);
-                File.WriteAllBytes(_settingsPath, payload);
+                File.WriteAllBytes(this._settingsPath, payload);
 
-                lock (_sync)
+                lock (this._sync)
                 {
-                    _cachedSettings = CloneSettings(target);
+                    this._cachedSettings = CloneSettings(target);
                 }
             }
             catch (Exception ex)
@@ -119,23 +119,25 @@ namespace TwitchChatOverlay.Services
         {
             try
             {
-                lock (_sync)
+                lock (this._sync)
                 {
-                    if (_cachedSettings != null)
-                        return CloneSettings(_cachedSettings);
+                    if (this._cachedSettings != null)
+                    {
+                        return CloneSettings(this._cachedSettings);
+                    }
                 }
 
-                if (!File.Exists(_settingsPath))
+                if (!File.Exists(this._settingsPath))
                 {
                     var defaults = new AppSettings();
-                    lock (_sync)
+                    lock (this._sync)
                     {
-                        _cachedSettings = CloneSettings(defaults);
+                        this._cachedSettings = CloneSettings(defaults);
                     }
                     return CloneSettings(defaults);
                 }
 
-                byte[] encryptedData = File.ReadAllBytes(_settingsPath);
+                var encryptedData = File.ReadAllBytes(this._settingsPath);
 
                 AppSettings loaded;
                 if (HasCurrentHeader(encryptedData))
@@ -145,12 +147,12 @@ namespace TwitchChatOverlay.Services
                 else
                 {
                     loaded = LoadLegacyFormat(encryptedData);
-                    SaveSettings(loaded);
+                    this.SaveSettings(loaded);
                 }
 
-                lock (_sync)
+                lock (this._sync)
                 {
-                    _cachedSettings = CloneSettings(loaded);
+                    this._cachedSettings = CloneSettings(loaded);
                 }
 
                 return CloneSettings(loaded);
@@ -173,8 +175,8 @@ namespace TwitchChatOverlay.Services
             try
             {
                 var protectedData = encryptedData.AsSpan(_settingsFormatHeader.Length).ToArray();
-                byte[] plaintext = ProtectedData.Unprotect(protectedData, null, DataProtectionScope.CurrentUser);
-                string json = Encoding.UTF8.GetString(plaintext);
+                var plaintext = ProtectedData.Unprotect(protectedData, null, DataProtectionScope.CurrentUser);
+                var json = Encoding.UTF8.GetString(plaintext);
                 return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
             }
             catch (Exception ex) when (ex is CryptographicException or JsonException or IOException or ArgumentException)
@@ -194,9 +196,11 @@ namespace TwitchChatOverlay.Services
                 aes.Padding = PaddingMode.PKCS7;
 
                 if (encryptedData == null || encryptedData.Length < aes.IV.Length)
+                {
                     return new AppSettings();
+                }
 
-                byte[] iv = new byte[aes.IV.Length];
+                var iv = new byte[aes.IV.Length];
                 Array.Copy(encryptedData, 0, iv, 0, iv.Length);
                 aes.IV = iv;
 
@@ -204,7 +208,7 @@ namespace TwitchChatOverlay.Services
                 using var ms = new MemoryStream(encryptedData, iv.Length, encryptedData.Length - iv.Length);
                 using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
                 using var sr = new StreamReader(cs, Encoding.UTF8);
-                string json = sr.ReadToEnd();
+                var json = sr.ReadToEnd();
                 return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
             }
             catch (Exception ex) when (ex is CryptographicException or JsonException or IOException or ArgumentException)

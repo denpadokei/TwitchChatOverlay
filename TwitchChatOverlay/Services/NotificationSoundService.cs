@@ -1,11 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Reflection;
 using NAudio.CoreAudioApi;
 using NAudio.Vorbis;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using TwitchChatOverlay.Models;
 
 namespace TwitchChatOverlay.Services
@@ -24,12 +24,12 @@ namespace TwitchChatOverlay.Services
         private readonly SettingsService _settingsService;
         private readonly object _sync = new();
         private readonly object _embeddedSoundSync = new();
-        private readonly List<PlaybackHandle> _activePlaybacks = new();
+        private readonly List<PlaybackHandle> _activePlaybacks = [];
         private string _embeddedSoundFilePath;
 
         public NotificationSoundService(SettingsService settingsService)
         {
-            _settingsService = settingsService;
+            this._settingsService = settingsService;
         }
 
         public IReadOnlyList<AudioOutputDeviceOption> GetOutputDevices()
@@ -62,24 +62,26 @@ namespace TwitchChatOverlay.Services
         public void PlayNotificationSound(OverlayNotification notification)
         {
             if (notification?.Type != NotificationType.Chat)
+            {
                 return;
+            }
 
-            PlaySoundCore(requireEnabledSetting: true);
+            this.PlaySoundCore(requireEnabledSetting: true);
         }
 
         public void PlayPreviewSound()
         {
-            PlaySoundCore(_settingsService.LoadSettings(), requireEnabledSetting: false);
+            this.PlaySoundCore(this._settingsService.LoadSettings(), requireEnabledSetting: false);
         }
 
         public void PlayPreviewSound(AppSettings previewSettings)
         {
-            PlaySoundCore(previewSettings ?? _settingsService.LoadSettings(), requireEnabledSetting: false);
+            this.PlaySoundCore(previewSettings ?? this._settingsService.LoadSettings(), requireEnabledSetting: false);
         }
 
         private void PlaySoundCore(bool requireEnabledSetting)
         {
-            PlaySoundCore(_settingsService.LoadSettings(), requireEnabledSetting);
+            this.PlaySoundCore(this._settingsService.LoadSettings(), requireEnabledSetting);
         }
 
         private void PlaySoundCore(AppSettings settings, bool requireEnabledSetting)
@@ -87,21 +89,25 @@ namespace TwitchChatOverlay.Services
             NotificationSoundSource soundSource = null;
             try
             {
-                settings ??= _settingsService.LoadSettings();
+                settings ??= this._settingsService.LoadSettings();
                 if (requireEnabledSetting && !settings.NotificationSoundEnabled)
-                    return;
-
-                int volumePercent = Math.Clamp(settings.NotificationSoundVolumePercent, 0, 100);
-                if (volumePercent <= 0)
-                    return;
-
-                soundSource = ResolveSoundSource(settings);
-                var playback = CreatePlayback(soundSource, volumePercent / 100f, settings.NotificationSoundOutputDeviceId ?? "");
-                playback.Output.PlaybackStopped += (_, __) => ReleasePlayback(playback);
-
-                lock (_sync)
                 {
-                    _activePlaybacks.Add(playback);
+                    return;
+                }
+
+                var volumePercent = Math.Clamp(settings.NotificationSoundVolumePercent, 0, 100);
+                if (volumePercent <= 0)
+                {
+                    return;
+                }
+
+                soundSource = this.ResolveSoundSource(settings);
+                var playback = CreatePlayback(soundSource, volumePercent / 100f, settings.NotificationSoundOutputDeviceId ?? "");
+                playback.Output.PlaybackStopped += (_, __) => this.ReleasePlayback(playback);
+
+                lock (this._sync)
+                {
+                    this._activePlaybacks.Add(playback);
                 }
 
                 playback.Output.Play();
@@ -117,9 +123,11 @@ namespace TwitchChatOverlay.Services
         public bool IsSupportedSoundFile(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))
+            {
                 return false;
+            }
 
-            string ext = Path.GetExtension(filePath);
+            var ext = Path.GetExtension(filePath);
             return ext.Equals(".wav", StringComparison.OrdinalIgnoreCase)
                 || ext.Equals(".mp3", StringComparison.OrdinalIgnoreCase)
                 || ext.Equals(".ogg", StringComparison.OrdinalIgnoreCase);
@@ -127,42 +135,50 @@ namespace TwitchChatOverlay.Services
 
         private NotificationSoundSource ResolveSoundSource(AppSettings settings)
         {
-            string customPath = settings.NotificationSoundFilePath ?? "";
+            var customPath = settings.NotificationSoundFilePath ?? "";
             if (settings.NotificationSoundSourceMode == NotificationSoundSourceMode.CustomFile)
             {
-                if (File.Exists(customPath) && IsSupportedSoundFile(customPath))
+                if (File.Exists(customPath) && this.IsSupportedSoundFile(customPath))
+                {
                     return NotificationSoundSource.ForFile(customPath);
+                }
 
                 if (!string.IsNullOrWhiteSpace(customPath))
+                {
                     LogService.Error($"通知音ファイルが無効なため埋め込み音源へフォールバックします: {customPath}");
+                }
             }
 
-            return NotificationSoundSource.ForFile(EnsureEmbeddedSoundFilePath());
+            return NotificationSoundSource.ForFile(this.EnsureEmbeddedSoundFilePath());
         }
 
         private string EnsureEmbeddedSoundFilePath()
         {
-            lock (_embeddedSoundSync)
+            lock (this._embeddedSoundSync)
             {
-                if (!string.IsNullOrWhiteSpace(_embeddedSoundFilePath) && File.Exists(_embeddedSoundFilePath))
-                    return _embeddedSoundFilePath;
+                if (!string.IsNullOrWhiteSpace(this._embeddedSoundFilePath) && File.Exists(this._embeddedSoundFilePath))
+                {
+                    return this._embeddedSoundFilePath;
+                }
 
-                string baseDir = Path.Combine(
+                var baseDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "TwitchChatOverlay",
                     "cache");
-                Directory.CreateDirectory(baseDir);
+                _ = Directory.CreateDirectory(baseDir);
 
-                string targetPath = Path.Combine(baseDir, "embedded-notification-sound.mp3");
+                var targetPath = Path.Combine(baseDir, "embedded-notification-sound.mp3");
 
                 using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(EmbeddedSoundResourceName);
                 if (stream == null)
+                {
                     throw new FileNotFoundException($"埋め込み通知音リソースが見つかりません: {EmbeddedSoundResourceName}");
+                }
 
-                bool shouldWrite = !File.Exists(targetPath);
+                var shouldWrite = !File.Exists(targetPath);
                 if (!shouldWrite)
                 {
-                    long fileLength = new FileInfo(targetPath).Length;
+                    var fileLength = new FileInfo(targetPath).Length;
                     shouldWrite = fileLength != stream.Length;
                 }
 
@@ -173,7 +189,7 @@ namespace TwitchChatOverlay.Services
                     stream.CopyTo(fileStream);
                 }
 
-                _embeddedSoundFilePath = targetPath;
+                this._embeddedSoundFilePath = targetPath;
                 return targetPath;
             }
         }
@@ -183,9 +199,11 @@ namespace TwitchChatOverlay.Services
             try
             {
                 var (sampleProvider, disposableSource) = CreateSampleProvider(soundSource);
-                ISampleProvider volumeProvider = sampleProvider;
+                var volumeProvider = sampleProvider;
                 if (volume < 0.999f)
+                {
                     volumeProvider = new VolumeSampleProvider(sampleProvider) { Volume = volume };
+                }
 
                 var output = CreateOutputDevice(outputDeviceId);
                 output.Init(volumeProvider.ToWaveProvider());
@@ -202,7 +220,7 @@ namespace TwitchChatOverlay.Services
         {
             if (soundSource.FilePath != null)
             {
-                string ext = Path.GetExtension(soundSource.FilePath);
+                var ext = Path.GetExtension(soundSource.FilePath);
                 if (ext.Equals(".ogg", StringComparison.OrdinalIgnoreCase))
                 {
                     var vorbisReader = new VorbisWaveReader(soundSource.FilePath);
@@ -214,7 +232,9 @@ namespace TwitchChatOverlay.Services
             }
 
             if (soundSource.BackingStream == null)
+            {
                 throw new InvalidOperationException("通知音ソースが初期化されていません。");
+            }
 
             var mp3Reader = new Mp3FileReader(soundSource.BackingStream);
             return (mp3Reader.ToSampleProvider(), mp3Reader);
@@ -225,7 +245,9 @@ namespace TwitchChatOverlay.Services
             try
             {
                 if (string.IsNullOrWhiteSpace(outputDeviceId))
+                {
                     return new WasapiOut(AudioClientShareMode.Shared, true, 120);
+                }
 
                 using var enumerator = new MMDeviceEnumerator();
                 var device = enumerator.GetDevice(outputDeviceId);
@@ -240,9 +262,9 @@ namespace TwitchChatOverlay.Services
 
         private void ReleasePlayback(PlaybackHandle playback)
         {
-            lock (_sync)
+            lock (this._sync)
             {
-                _activePlaybacks.Remove(playback);
+                _ = this._activePlaybacks.Remove(playback);
             }
 
             playback.Dispose();
@@ -255,17 +277,23 @@ namespace TwitchChatOverlay.Services
 
             private NotificationSoundSource(string filePath, Stream backingStream)
             {
-                FilePath = filePath;
-                BackingStream = backingStream;
+                this.FilePath = filePath;
+                this.BackingStream = backingStream;
             }
 
-            public static NotificationSoundSource ForFile(string filePath) => new(filePath, null);
+            public static NotificationSoundSource ForFile(string filePath)
+            {
+                return new(filePath, null);
+            }
 
-            public static NotificationSoundSource ForEmbedded(Stream stream) => new(null, stream);
+            public static NotificationSoundSource ForEmbedded(Stream stream)
+            {
+                return new(null, stream);
+            }
 
             public void Dispose()
             {
-                BackingStream?.Dispose();
+                this.BackingStream?.Dispose();
             }
         }
 
@@ -278,16 +306,16 @@ namespace TwitchChatOverlay.Services
 
             public PlaybackHandle(IWavePlayer output, IDisposable disposableSource, NotificationSoundSource soundSource)
             {
-                Output = output;
-                _disposableSource = disposableSource;
-                _soundSource = soundSource;
+                this.Output = output;
+                this._disposableSource = disposableSource;
+                this._soundSource = soundSource;
             }
 
             public void Dispose()
             {
-                Output.Dispose();
-                _disposableSource?.Dispose();
-                _soundSource?.Dispose();
+                this.Output.Dispose();
+                this._disposableSource?.Dispose();
+                this._soundSource?.Dispose();
             }
         }
     }

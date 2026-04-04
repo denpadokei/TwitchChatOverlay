@@ -1,10 +1,10 @@
+using Newtonsoft.Json.Linq;
 using System;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
 
 namespace TwitchChatOverlay.Services
 {
@@ -26,60 +26,68 @@ namespace TwitchChatOverlay.Services
 
         public async Task<bool> ConnectAsync(string host, int port, string password, CancellationToken cancellationToken = default)
         {
-            await _connectLock.WaitAsync(cancellationToken);
+            await this._connectLock.WaitAsync(cancellationToken);
             try
             {
-                if (IsConnected)
+                if (this.IsConnected)
+                {
                     return true;
+                }
 
-                Disconnect();
-                _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                _webSocket = new ClientWebSocket();
+                this.Disconnect();
+                this._cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                this._webSocket = new ClientWebSocket();
 
-                string targetHost = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host;
-                int targetPort = port > 0 ? port : 4455;
-                await _webSocket.ConnectAsync(new Uri($"ws://{targetHost}:{targetPort}"), _cts.Token);
+                var targetHost = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host;
+                var targetPort = port > 0 ? port : 4455;
+                await this._webSocket.ConnectAsync(new Uri($"ws://{targetHost}:{targetPort}"), this._cts.Token);
 
-                var hello = await ReceiveJsonAsync(_webSocket, _cts.Token);
-                int op = hello["op"]?.Value<int>() ?? -1;
+                var hello = await ReceiveJsonAsync(this._webSocket, this._cts.Token);
+                var op = hello["op"]?.Value<int>() ?? -1;
                 if (op != 0)
+                {
                     throw new Exception("OBS Hello メッセージを受信できませんでした。");
+                }
 
-                int rpcVersion = hello["d"]?["rpcVersion"]?.Value<int>() ?? 1;
-                string authentication = BuildAuthentication(password, hello["d"]?["authentication"]);
+                var rpcVersion = hello["d"]?["rpcVersion"]?.Value<int>() ?? 1;
+                var authentication = BuildAuthentication(password, hello["d"]?["authentication"]);
 
                 var identifyData = new JObject
                 {
                     ["rpcVersion"] = rpcVersion
                 };
                 if (!string.IsNullOrEmpty(authentication))
+                {
                     identifyData["authentication"] = authentication;
+                }
 
-                await SendJsonAsync(_webSocket, new JObject
+                await SendJsonAsync(this._webSocket, new JObject
                 {
                     ["op"] = 1,
                     ["d"] = identifyData
-                }, _cts.Token);
+                }, this._cts.Token);
 
-                var identified = await ReceiveJsonAsync(_webSocket, _cts.Token);
-                int identifiedOp = identified["op"]?.Value<int>() ?? -1;
+                var identified = await ReceiveJsonAsync(this._webSocket, this._cts.Token);
+                var identifiedOp = identified["op"]?.Value<int>() ?? -1;
                 if (identifiedOp != 2)
+                {
                     throw new Exception($"OBS Identify に失敗しました。op={identifiedOp}");
+                }
 
-                IsConnected = true;
-                _ = Task.Run(() => ReceiveLoopAsync(_cts.Token));
+                this.IsConnected = true;
+                _ = Task.Run(() => this.ReceiveLoopAsync(this._cts.Token));
                 LogService.Info("OBS WebSocket 接続完了");
                 return true;
             }
             catch (Exception ex)
             {
                 LogService.Warning("OBS WebSocket 接続失敗", ex);
-                Disconnect();
+                this.Disconnect();
                 return false;
             }
             finally
             {
-                _connectLock.Release();
+                _ = this._connectLock.Release();
             }
         }
 
@@ -87,40 +95,46 @@ namespace TwitchChatOverlay.Services
         {
             try
             {
-                _cts?.Cancel();
+                this._cts?.Cancel();
             }
             catch
             {
             }
 
-            _webSocket?.Dispose();
-            _webSocket = null;
-            _cts?.Dispose();
-            _cts = null;
-            IsConnected = false;
-            IsStreaming = false;
+            this._webSocket?.Dispose();
+            this._webSocket = null;
+            this._cts?.Dispose();
+            this._cts = null;
+            this.IsConnected = false;
+            this.IsStreaming = false;
         }
 
         private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
         {
             try
             {
-                while (!cancellationToken.IsCancellationRequested && _webSocket?.State == WebSocketState.Open)
+                while (!cancellationToken.IsCancellationRequested && this._webSocket?.State == WebSocketState.Open)
                 {
-                    JObject msg = await ReceiveJsonAsync(_webSocket, cancellationToken);
-                    int op = msg["op"]?.Value<int>() ?? -1;
+                    var msg = await ReceiveJsonAsync(this._webSocket, cancellationToken);
+                    var op = msg["op"]?.Value<int>() ?? -1;
                     if (op != 5)
+                    {
                         continue;
+                    }
 
-                    string eventType = msg["d"]?["eventType"]?.ToString();
+                    var eventType = msg["d"]?["eventType"]?.ToString();
                     if (!string.Equals(eventType, "StreamStateChanged", StringComparison.Ordinal))
+                    {
                         continue;
+                    }
 
-                    bool isStreaming = msg["d"]?["eventData"]?["outputActive"]?.Value<bool>() ?? false;
-                    if (IsStreaming == isStreaming)
+                    var isStreaming = msg["d"]?["eventData"]?["outputActive"]?.Value<bool>() ?? false;
+                    if (this.IsStreaming == isStreaming)
+                    {
                         continue;
+                    }
 
-                    IsStreaming = isStreaming;
+                    this.IsStreaming = isStreaming;
                     StreamingStateChanged?.Invoke(this, new ObsStreamingStateChangedEventArgs { IsStreaming = isStreaming });
                 }
             }
@@ -134,13 +148,13 @@ namespace TwitchChatOverlay.Services
             }
             finally
             {
-                IsConnected = false;
+                this.IsConnected = false;
             }
         }
 
         private static async Task SendJsonAsync(ClientWebSocket socket, JObject payload, CancellationToken cancellationToken)
         {
-            byte[] bytes = Encoding.UTF8.GetBytes(payload.ToString(Newtonsoft.Json.Formatting.None));
+            var bytes = Encoding.UTF8.GetBytes(payload.ToString(Newtonsoft.Json.Formatting.None));
             await socket.SendAsync(bytes, WebSocketMessageType.Text, true, cancellationToken);
         }
 
@@ -153,28 +167,36 @@ namespace TwitchChatOverlay.Services
             {
                 var result = await socket.ReceiveAsync(buffer, cancellationToken);
                 if (result.MessageType == WebSocketMessageType.Close)
+                {
                     throw new Exception("OBS WebSocket がクローズされました。");
+                }
 
-                builder.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
+                _ = builder.Append(Encoding.UTF8.GetString(buffer, 0, result.Count));
                 if (result.EndOfMessage)
+                {
                     return JObject.Parse(builder.ToString());
+                }
             }
         }
 
         private static string BuildAuthentication(string password, JToken authToken)
         {
             if (authToken == null)
+            {
                 return null;
+            }
 
-            string challenge = authToken["challenge"]?.ToString();
-            string salt = authToken["salt"]?.ToString();
+            var challenge = authToken["challenge"]?.ToString();
+            var salt = authToken["salt"]?.ToString();
             if (string.IsNullOrEmpty(challenge) || string.IsNullOrEmpty(salt))
+            {
                 return null;
+            }
 
-            string basePassword = password ?? string.Empty;
-            byte[] secretHash = SHA256.HashData(Encoding.UTF8.GetBytes(basePassword + salt));
-            string secret = Convert.ToBase64String(secretHash);
-            byte[] authHash = SHA256.HashData(Encoding.UTF8.GetBytes(secret + challenge));
+            var basePassword = password ?? string.Empty;
+            var secretHash = SHA256.HashData(Encoding.UTF8.GetBytes(basePassword + salt));
+            var secret = Convert.ToBase64String(secretHash);
+            var authHash = SHA256.HashData(Encoding.UTF8.GetBytes(secret + challenge));
             return Convert.ToBase64String(authHash);
         }
     }

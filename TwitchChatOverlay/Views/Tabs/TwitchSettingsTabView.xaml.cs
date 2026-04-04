@@ -6,7 +6,7 @@ namespace TwitchChatOverlay.Views.Tabs
     {
         public TwitchSettingsTabView()
         {
-            InitializeComponent();
+            this.InitializeComponent();
         }
     }
 }

@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -7,8 +9,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace TwitchChatOverlay.Services
 {
@@ -45,20 +45,22 @@ namespace TwitchChatOverlay.Services
 
         public YouTubeOAuthService(string clientSecret = null)
         {
-            _clientSecret = clientSecret;
+            this._clientSecret = clientSecret;
         }
 
         public async Task<YouTubeTokenResponse> AuthorizeAsync(string clientId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(clientId))
+            {
                 throw new InvalidOperationException("YouTubeClientId が未設定です。build/local.props を設定してください。");
+            }
 
-            string redirectUri = "http://127.0.0.1:18765/callback/";
-            string state = Guid.NewGuid().ToString("N");
-            string codeVerifier = CreateCodeVerifier();
-            string codeChallenge = CreateCodeChallenge(codeVerifier);
+            var redirectUri = "http://127.0.0.1:18765/callback/";
+            var state = Guid.NewGuid().ToString("N");
+            var codeVerifier = CreateCodeVerifier();
+            var codeChallenge = CreateCodeChallenge(codeVerifier);
 
-            string authUrl = BuildAuthorizationUrl(clientId, redirectUri, state, codeChallenge);
+            var authUrl = this.BuildAuthorizationUrl(clientId, redirectUri, state, codeChallenge);
 
             using var listener = new HttpListener();
             listener.Prefixes.Add(redirectUri);
@@ -69,7 +71,7 @@ namespace TwitchChatOverlay.Services
             catch (HttpListenerException ex)
             {
                 var redirectUriInfo = new Uri(redirectUri);
-                string endpoint = $"{redirectUriInfo.Host}:{redirectUriInfo.Port}";
+                var endpoint = $"{redirectUriInfo.Host}:{redirectUriInfo.Port}";
                 throw new InvalidOperationException(
                     $"YouTube OAuth のローカルコールバック待受を開始できませんでした ({endpoint})。" +
                     "このアドレス/ポートが他のアプリで使用中か、待受の権限が不足している可能性があります。" +
@@ -77,7 +79,7 @@ namespace TwitchChatOverlay.Services
                     ex);
             }
 
-            Process.Start(new ProcessStartInfo
+            _ = Process.Start(new ProcessStartInfo
             {
                 FileName = authUrl,
                 UseShellExecute = true
@@ -92,31 +94,42 @@ namespace TwitchChatOverlay.Services
             }
 
             var context = await contextTask;
-            string code = context.Request.QueryString["code"];
-            string returnedState = context.Request.QueryString["state"];
-            string error = context.Request.QueryString["error"];
+            var code = context.Request.QueryString["code"];
+            var returnedState = context.Request.QueryString["state"];
+            var error = context.Request.QueryString["error"];
 
             await WriteCallbackResponseAsync(context.Response, error);
 
             if (!string.IsNullOrEmpty(error))
+            {
                 throw new Exception($"YouTube OAuth エラー: {error}");
+            }
 
             if (string.IsNullOrEmpty(code))
+            {
                 throw new Exception("YouTube OAuth コールバックに code が含まれていません。");
+            }
 
             if (!string.Equals(state, returnedState, StringComparison.Ordinal))
+            {
                 throw new Exception("YouTube OAuth の state が一致しません。");
+            }
 
-            var token = await ExchangeCodeAsync(clientId, code, codeVerifier, redirectUri, cancellationToken);
+            var token = await this.ExchangeCodeAsync(clientId, code, codeVerifier, redirectUri, cancellationToken);
             return token;
         }
 
         public async Task<YouTubeTokenResponse> RefreshTokenAsync(string clientId, string refreshToken, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(clientId))
+            {
                 throw new InvalidOperationException("YouTubeClientId が未設定です。");
+            }
+
             if (string.IsNullOrWhiteSpace(refreshToken))
+            {
                 throw new InvalidOperationException("YouTube refresh token が未設定です。");
+            }
 
             var parameters = new List<KeyValuePair<string, string>>
             {
@@ -124,28 +137,34 @@ namespace TwitchChatOverlay.Services
                 new("grant_type", "refresh_token"),
                 new("refresh_token", refreshToken)
             };
-            if (!string.IsNullOrWhiteSpace(_clientSecret))
-                parameters.Add(new("client_secret", _clientSecret));
+            if (!string.IsNullOrWhiteSpace(this._clientSecret))
+            {
+                parameters.Add(new("client_secret", this._clientSecret));
+            }
 
             var request = new FormUrlEncodedContent(parameters);
 
             var response = await Http.PostAsync(TokenEndpoint, request, cancellationToken);
-            string json = await response.Content.ReadAsStringAsync(cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
+            {
                 throw new Exception($"YouTube トークン更新失敗: {(int)response.StatusCode} {json}");
+            }
 
             var token = JsonConvert.DeserializeObject<YouTubeTokenResponse>(json)
                 ?? throw new Exception("YouTube トークン更新レスポンスの解析に失敗しました。");
 
             if (string.IsNullOrEmpty(token.RefreshToken))
+            {
                 token.RefreshToken = refreshToken;
+            }
 
             return token;
         }
 
         private string BuildAuthorizationUrl(string clientId, string redirectUri, string state, string codeChallenge)
         {
-            string scope = Uri.EscapeDataString(string.Join(" ", _scopes));
+            var scope = Uri.EscapeDataString(string.Join(" ", this._scopes));
             return $"{AuthEndpoint}?client_id={Uri.EscapeDataString(clientId)}" +
                    $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
                    "&response_type=code" +
@@ -172,16 +191,18 @@ namespace TwitchChatOverlay.Services
                 new("redirect_uri", redirectUri),
                 new("grant_type", "authorization_code")
             };
-            if (!string.IsNullOrWhiteSpace(_clientSecret))
-                parameters.Add(new("client_secret", _clientSecret));
+            if (!string.IsNullOrWhiteSpace(this._clientSecret))
+            {
+                parameters.Add(new("client_secret", this._clientSecret));
+            }
 
             var request = new FormUrlEncodedContent(parameters);
 
             var response = await Http.PostAsync(TokenEndpoint, request, cancellationToken);
-            string json = await response.Content.ReadAsStringAsync(cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                string message = json;
+                var message = json;
                 try
                 {
                     var obj = JObject.Parse(json);
@@ -202,10 +223,10 @@ namespace TwitchChatOverlay.Services
 
         private static async Task WriteCallbackResponseAsync(HttpListenerResponse response, string error)
         {
-            string html = string.IsNullOrEmpty(error)
+            var html = string.IsNullOrEmpty(error)
                 ? "<html><body><h3>YouTube OAuth 完了</h3><p>アプリに戻ってください。</p></body></html>"
                 : $"<html><body><h3>YouTube OAuth 失敗</h3><p>{WebUtility.HtmlEncode(error)}</p></body></html>";
-            byte[] body = Encoding.UTF8.GetBytes(html);
+            var body = Encoding.UTF8.GetBytes(html);
             response.ContentType = "text/html; charset=utf-8";
             response.ContentLength64 = body.Length;
             await response.OutputStream.WriteAsync(body, 0, body.Length);
@@ -214,7 +235,7 @@ namespace TwitchChatOverlay.Services
 
         private static string CreateCodeVerifier()
         {
-            byte[] bytes = new byte[32];
+            var bytes = new byte[32];
             RandomNumberGenerator.Fill(bytes);
             return Base64UrlEncode(bytes);
         }
@@ -222,7 +243,7 @@ namespace TwitchChatOverlay.Services
         private static string CreateCodeChallenge(string codeVerifier)
         {
             using var sha = SHA256.Create();
-            byte[] hash = sha.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
+            var hash = sha.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
             return Base64UrlEncode(hash);
         }
 

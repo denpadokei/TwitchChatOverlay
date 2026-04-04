@@ -29,80 +29,80 @@ namespace TwitchChatOverlay.ViewModels
         {
         }
 
-        public bool HasToken => MainWindowViewModel.HasToken;
+        public bool HasToken => this.MainWindowViewModel.HasToken;
 
-        public string TokenInfo => MainWindowViewModel.TokenInfo;
+        public string TokenInfo => this.MainWindowViewModel.TokenInfo;
 
-        public ICommand AuthorizeOAuthCommand => MainWindowViewModel.AuthorizeOAuthCommand;
+        public ICommand AuthorizeOAuthCommand => this.MainWindowViewModel.AuthorizeOAuthCommand;
 
-        public bool IsAuthorizingOAuth => MainWindowViewModel.IsAuthorizingOAuth;
+        public bool IsAuthorizingOAuth => this.MainWindowViewModel.IsAuthorizingOAuth;
 
-        public string DeviceUserCode => MainWindowViewModel.DeviceUserCode;
+        public string DeviceUserCode => this.MainWindowViewModel.DeviceUserCode;
 
         public string ChannelName
         {
-            get => MainWindowViewModel.ChannelName;
-            set => MainWindowViewModel.ChannelName = value;
+            get => this.MainWindowViewModel.ChannelName;
+            set => this.MainWindowViewModel.ChannelName = value;
         }
 
-        public ObservableCollection<string> RecentChannels => MainWindowViewModel.RecentChannels;
+        public ObservableCollection<string> RecentChannels => this.MainWindowViewModel.RecentChannels;
 
-        public bool HasRecentChannels => MainWindowViewModel.HasRecentChannels;
+        public bool HasRecentChannels => this.MainWindowViewModel.HasRecentChannels;
 
-        public ICommand SelectRecentChannelCommand => MainWindowViewModel.SelectRecentChannelCommand;
+        public ICommand SelectRecentChannelCommand => this.MainWindowViewModel.SelectRecentChannelCommand;
 
-        public ICommand ConnectCommand => MainWindowViewModel.ConnectCommand;
+        public ICommand ConnectCommand => this.MainWindowViewModel.ConnectCommand;
 
-        public ICommand DisconnectCommand => MainWindowViewModel.DisconnectCommand;
+        public ICommand DisconnectCommand => this.MainWindowViewModel.DisconnectCommand;
 
         public bool ShowReward
         {
-            get => MainWindowViewModel.ShowReward;
-            set => MainWindowViewModel.ShowReward = value;
+            get => this.MainWindowViewModel.ShowReward;
+            set => this.MainWindowViewModel.ShowReward = value;
         }
 
         public bool ShowRaid
         {
-            get => MainWindowViewModel.ShowRaid;
-            set => MainWindowViewModel.ShowRaid = value;
+            get => this.MainWindowViewModel.ShowRaid;
+            set => this.MainWindowViewModel.ShowRaid = value;
         }
 
         public bool ShowFollow
         {
-            get => MainWindowViewModel.ShowFollow;
-            set => MainWindowViewModel.ShowFollow = value;
+            get => this.MainWindowViewModel.ShowFollow;
+            set => this.MainWindowViewModel.ShowFollow = value;
         }
 
         public bool ShowSubscribe
         {
-            get => MainWindowViewModel.ShowSubscribe;
-            set => MainWindowViewModel.ShowSubscribe = value;
+            get => this.MainWindowViewModel.ShowSubscribe;
+            set => this.MainWindowViewModel.ShowSubscribe = value;
         }
 
         public bool ShowGiftSubscribe
         {
-            get => MainWindowViewModel.ShowGiftSubscribe;
-            set => MainWindowViewModel.ShowGiftSubscribe = value;
+            get => this.MainWindowViewModel.ShowGiftSubscribe;
+            set => this.MainWindowViewModel.ShowGiftSubscribe = value;
         }
 
         public bool ShowResub
         {
-            get => MainWindowViewModel.ShowResub;
-            set => MainWindowViewModel.ShowResub = value;
+            get => this.MainWindowViewModel.ShowResub;
+            set => this.MainWindowViewModel.ShowResub = value;
         }
 
         public bool ShowHypeTrainBegin
         {
-            get => MainWindowViewModel.ShowHypeTrainBegin;
-            set => MainWindowViewModel.ShowHypeTrainBegin = value;
+            get => this.MainWindowViewModel.ShowHypeTrainBegin;
+            set => this.MainWindowViewModel.ShowHypeTrainBegin = value;
         }
 
         public bool ShowHypeTrainEnd
         {
-            get => MainWindowViewModel.ShowHypeTrainEnd;
-            set => MainWindowViewModel.ShowHypeTrainEnd = value;
+            get => this.MainWindowViewModel.ShowHypeTrainEnd;
+            set => this.MainWindowViewModel.ShowHypeTrainEnd = value;
         }
 
-        public ICommand PreviewTwitchCommentCommand => MainWindowViewModel.PreviewTwitchCommentCommand;
+        public ICommand PreviewTwitchCommentCommand => this.MainWindowViewModel.PreviewTwitchCommentCommand;
     }
 }

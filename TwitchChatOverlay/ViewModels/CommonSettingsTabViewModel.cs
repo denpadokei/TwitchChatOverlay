@@ -1,5 +1,5 @@
-using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Windows.Input;
 using TwitchChatOverlay.Services;
 
@@ -38,122 +38,122 @@ namespace TwitchChatOverlay.ViewModels
 
         public int ToastDurationSeconds
         {
-            get => MainWindowViewModel.ToastDurationSeconds;
-            set => MainWindowViewModel.ToastDurationSeconds = value;
+            get => this.MainWindowViewModel.ToastDurationSeconds;
+            set => this.MainWindowViewModel.ToastDurationSeconds = value;
         }
 
         public int ToastMaxCount
         {
-            get => MainWindowViewModel.ToastMaxCount;
-            set => MainWindowViewModel.ToastMaxCount = value;
+            get => this.MainWindowViewModel.ToastMaxCount;
+            set => this.MainWindowViewModel.ToastMaxCount = value;
         }
 
         public int ToastPositionIndex
         {
-            get => MainWindowViewModel.ToastPositionIndex;
-            set => MainWindowViewModel.ToastPositionIndex = value;
+            get => this.MainWindowViewModel.ToastPositionIndex;
+            set => this.MainWindowViewModel.ToastPositionIndex = value;
         }
 
-        public ObservableCollection<string> MonitorList => MainWindowViewModel.MonitorList;
+        public ObservableCollection<string> MonitorList => this.MainWindowViewModel.MonitorList;
 
         public int ToastMonitorIndex
         {
-            get => MainWindowViewModel.ToastMonitorIndex;
-            set => MainWindowViewModel.ToastMonitorIndex = value;
+            get => this.MainWindowViewModel.ToastMonitorIndex;
+            set => this.MainWindowViewModel.ToastMonitorIndex = value;
         }
 
         public double ToastFontSize
         {
-            get => MainWindowViewModel.ToastFontSize;
-            set => MainWindowViewModel.ToastFontSize = value;
+            get => this.MainWindowViewModel.ToastFontSize;
+            set => this.MainWindowViewModel.ToastFontSize = value;
         }
 
         public double ToastWidth
         {
-            get => MainWindowViewModel.ToastWidth;
-            set => MainWindowViewModel.ToastWidth = value;
+            get => this.MainWindowViewModel.ToastWidth;
+            set => this.MainWindowViewModel.ToastWidth = value;
         }
 
         public int ToastBackgroundOpacityPercent
         {
-            get => MainWindowViewModel.ToastBackgroundOpacityPercent;
-            set => MainWindowViewModel.ToastBackgroundOpacityPercent = value;
+            get => this.MainWindowViewModel.ToastBackgroundOpacityPercent;
+            set => this.MainWindowViewModel.ToastBackgroundOpacityPercent = value;
         }
 
         public string ToastFontFamily
         {
-            get => MainWindowViewModel.ToastFontFamily;
-            set => MainWindowViewModel.ToastFontFamily = value;
+            get => this.MainWindowViewModel.ToastFontFamily;
+            set => this.MainWindowViewModel.ToastFontFamily = value;
         }
 
-        public List<string> FontFamilyPresets => MainWindowViewModel.FontFamilyPresets;
+        public List<string> FontFamilyPresets => this.MainWindowViewModel.FontFamilyPresets;
 
         public int ToastBackgroundModeIndex
         {
-            get => MainWindowViewModel.ToastBackgroundModeIndex;
-            set => MainWindowViewModel.ToastBackgroundModeIndex = value;
+            get => this.MainWindowViewModel.ToastBackgroundModeIndex;
+            set => this.MainWindowViewModel.ToastBackgroundModeIndex = value;
         }
 
-        public bool IsCustomBackgroundColor => MainWindowViewModel.IsCustomBackgroundColor;
+        public bool IsCustomBackgroundColor => this.MainWindowViewModel.IsCustomBackgroundColor;
 
         public string ToastCustomBackgroundColor
         {
-            get => MainWindowViewModel.ToastCustomBackgroundColor;
-            set => MainWindowViewModel.ToastCustomBackgroundColor = value;
+            get => this.MainWindowViewModel.ToastCustomBackgroundColor;
+            set => this.MainWindowViewModel.ToastCustomBackgroundColor = value;
         }
 
         public int ToastFontColorModeIndex
         {
-            get => MainWindowViewModel.ToastFontColorModeIndex;
-            set => MainWindowViewModel.ToastFontColorModeIndex = value;
+            get => this.MainWindowViewModel.ToastFontColorModeIndex;
+            set => this.MainWindowViewModel.ToastFontColorModeIndex = value;
         }
 
-        public bool IsCustomFontColor => MainWindowViewModel.IsCustomFontColor;
+        public bool IsCustomFontColor => this.MainWindowViewModel.IsCustomFontColor;
 
         public string ToastCustomFontColor
         {
-            get => MainWindowViewModel.ToastCustomFontColor;
-            set => MainWindowViewModel.ToastCustomFontColor = value;
+            get => this.MainWindowViewModel.ToastCustomFontColor;
+            set => this.MainWindowViewModel.ToastCustomFontColor = value;
         }
 
         public bool NotificationSoundEnabled
         {
-            get => MainWindowViewModel.NotificationSoundEnabled;
-            set => MainWindowViewModel.NotificationSoundEnabled = value;
+            get => this.MainWindowViewModel.NotificationSoundEnabled;
+            set => this.MainWindowViewModel.NotificationSoundEnabled = value;
         }
 
         public int NotificationSoundSourceModeIndex
         {
-            get => MainWindowViewModel.NotificationSoundSourceModeIndex;
-            set => MainWindowViewModel.NotificationSoundSourceModeIndex = value;
+            get => this.MainWindowViewModel.NotificationSoundSourceModeIndex;
+            set => this.MainWindowViewModel.NotificationSoundSourceModeIndex = value;
         }
 
-        public bool IsCustomNotificationSoundFile => MainWindowViewModel.IsCustomNotificationSoundFile;
+        public bool IsCustomNotificationSoundFile => this.MainWindowViewModel.IsCustomNotificationSoundFile;
 
         public string NotificationSoundFilePath
         {
-            get => MainWindowViewModel.NotificationSoundFilePath;
-            set => MainWindowViewModel.NotificationSoundFilePath = value;
+            get => this.MainWindowViewModel.NotificationSoundFilePath;
+            set => this.MainWindowViewModel.NotificationSoundFilePath = value;
         }
 
-        public ICommand BrowseNotificationSoundFileCommand => MainWindowViewModel.BrowseNotificationSoundFileCommand;
+        public ICommand BrowseNotificationSoundFileCommand => this.MainWindowViewModel.BrowseNotificationSoundFileCommand;
 
         public int NotificationSoundVolumePercent
         {
-            get => MainWindowViewModel.NotificationSoundVolumePercent;
-            set => MainWindowViewModel.NotificationSoundVolumePercent = value;
+            get => this.MainWindowViewModel.NotificationSoundVolumePercent;
+            set => this.MainWindowViewModel.NotificationSoundVolumePercent = value;
         }
 
-        public ObservableCollection<AudioOutputDeviceOption> AudioOutputDevices => MainWindowViewModel.AudioOutputDevices;
+        public ObservableCollection<AudioOutputDeviceOption> AudioOutputDevices => this.MainWindowViewModel.AudioOutputDevices;
 
         public string NotificationSoundOutputDeviceId
         {
-            get => MainWindowViewModel.NotificationSoundOutputDeviceId;
-            set => MainWindowViewModel.NotificationSoundOutputDeviceId = value;
+            get => this.MainWindowViewModel.NotificationSoundOutputDeviceId;
+            set => this.MainWindowViewModel.NotificationSoundOutputDeviceId = value;
         }
 
-        public ICommand PreviewNotificationSoundCommand => MainWindowViewModel.PreviewNotificationSoundCommand;
+        public ICommand PreviewNotificationSoundCommand => this.MainWindowViewModel.PreviewNotificationSoundCommand;
 
-        public ICommand PreviewCommonCommentCommand => MainWindowViewModel.PreviewCommonCommentCommand;
+        public ICommand PreviewCommonCommentCommand => this.MainWindowViewModel.PreviewCommonCommentCommand;
     }
 }

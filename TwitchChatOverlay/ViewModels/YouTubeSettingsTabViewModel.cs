@@ -22,58 +22,58 @@ namespace TwitchChatOverlay.ViewModels
         {
         }
 
-        public string YouTubeTokenInfo => MainWindowViewModel.YouTubeTokenInfo;
+        public string YouTubeTokenInfo => this.MainWindowViewModel.YouTubeTokenInfo;
 
-        public ICommand AuthorizeYouTubeOAuthCommand => MainWindowViewModel.AuthorizeYouTubeOAuthCommand;
+        public ICommand AuthorizeYouTubeOAuthCommand => this.MainWindowViewModel.AuthorizeYouTubeOAuthCommand;
 
-        public ICommand ConnectYouTubeCommand => MainWindowViewModel.ConnectYouTubeCommand;
+        public ICommand ConnectYouTubeCommand => this.MainWindowViewModel.ConnectYouTubeCommand;
 
-        public ICommand DisconnectYouTubeCommand => MainWindowViewModel.DisconnectYouTubeCommand;
+        public ICommand DisconnectYouTubeCommand => this.MainWindowViewModel.DisconnectYouTubeCommand;
 
         public bool ShowYouTubeChat
         {
-            get => MainWindowViewModel.ShowYouTubeChat;
-            set => MainWindowViewModel.ShowYouTubeChat = value;
+            get => this.MainWindowViewModel.ShowYouTubeChat;
+            set => this.MainWindowViewModel.ShowYouTubeChat = value;
         }
 
         public bool ShowYouTubeSuperChat
         {
-            get => MainWindowViewModel.ShowYouTubeSuperChat;
-            set => MainWindowViewModel.ShowYouTubeSuperChat = value;
+            get => this.MainWindowViewModel.ShowYouTubeSuperChat;
+            set => this.MainWindowViewModel.ShowYouTubeSuperChat = value;
         }
 
         public bool ShowYouTubeMembership
         {
-            get => MainWindowViewModel.ShowYouTubeMembership;
-            set => MainWindowViewModel.ShowYouTubeMembership = value;
+            get => this.MainWindowViewModel.ShowYouTubeMembership;
+            set => this.MainWindowViewModel.ShowYouTubeMembership = value;
         }
 
-        public ICommand PreviewYouTubeCommentCommand => MainWindowViewModel.PreviewYouTubeCommentCommand;
+        public ICommand PreviewYouTubeCommentCommand => this.MainWindowViewModel.PreviewYouTubeCommentCommand;
 
         public bool ObsWebSocketEnabled
         {
-            get => MainWindowViewModel.ObsWebSocketEnabled;
-            set => MainWindowViewModel.ObsWebSocketEnabled = value;
+            get => this.MainWindowViewModel.ObsWebSocketEnabled;
+            set => this.MainWindowViewModel.ObsWebSocketEnabled = value;
         }
 
         public string ObsWebSocketHost
         {
-            get => MainWindowViewModel.ObsWebSocketHost;
-            set => MainWindowViewModel.ObsWebSocketHost = value;
+            get => this.MainWindowViewModel.ObsWebSocketHost;
+            set => this.MainWindowViewModel.ObsWebSocketHost = value;
         }
 
         public int ObsWebSocketPort
         {
-            get => MainWindowViewModel.ObsWebSocketPort;
-            set => MainWindowViewModel.ObsWebSocketPort = value;
+            get => this.MainWindowViewModel.ObsWebSocketPort;
+            set => this.MainWindowViewModel.ObsWebSocketPort = value;
         }
 
         public string ObsWebSocketPassword
         {
-            get => MainWindowViewModel.ObsWebSocketPassword;
-            set => MainWindowViewModel.ObsWebSocketPassword = value;
+            get => this.MainWindowViewModel.ObsWebSocketPassword;
+            set => this.MainWindowViewModel.ObsWebSocketPassword = value;
         }
 
-        public string YouTubeStatusMessage => MainWindowViewModel.YouTubeStatusMessage;
+        public string YouTubeStatusMessage => this.MainWindowViewModel.YouTubeStatusMessage;
     }
 }

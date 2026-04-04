@@ -1,7 +1,7 @@
+using Prism.Mvvm;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using Prism.Mvvm;
 using TwitchChatOverlay.Infrastructure;
 
 namespace TwitchChatOverlay.ViewModels
@@ -14,40 +14,48 @@ namespace TwitchChatOverlay.ViewModels
 
         protected TabViewModelBase(MainWindowViewModel mainWindowViewModel, params string[] forwardedPropertyNames)
         {
-            MainWindowViewModel = mainWindowViewModel;
-            _forwardedPropertyNames = new HashSet<string>(forwardedPropertyNames);
-            MainWindowViewModel.PropertyChanged += OnMainWindowViewModelPropertyChanged;
+            this.MainWindowViewModel = mainWindowViewModel;
+            this._forwardedPropertyNames = [.. forwardedPropertyNames];
+            this.MainWindowViewModel.PropertyChanged += this.OnMainWindowViewModelPropertyChanged;
         }
 
         protected MainWindowViewModel MainWindowViewModel { get; }
 
         public void Initialize()
         {
-            if (_initialized)
+            if (this._initialized)
+            {
                 return;
+            }
 
-            _initialized = true;
-            OnInitialize();
+            this._initialized = true;
+            this.OnInitialize();
 
-            foreach (var propertyName in _forwardedPropertyNames)
-                RaisePropertyChanged(propertyName);
+            foreach (var propertyName in this._forwardedPropertyNames)
+            {
+                this.RaisePropertyChanged(propertyName);
+            }
         }
 
         public void Dispose()
         {
-            Dispose(true);
+            this.Dispose(true);
             GC.SuppressFinalize(this);
         }
 
         protected virtual void Dispose(bool disposing)
         {
-            if (_disposed)
+            if (this._disposed)
+            {
                 return;
+            }
 
             if (disposing)
-                MainWindowViewModel.PropertyChanged -= OnMainWindowViewModelPropertyChanged;
+            {
+                this.MainWindowViewModel.PropertyChanged -= this.OnMainWindowViewModelPropertyChanged;
+            }
 
-            _disposed = true;
+            this._disposed = true;
         }
 
         protected virtual void OnInitialize()
@@ -56,8 +64,10 @@ namespace TwitchChatOverlay.ViewModels
 
         private void OnMainWindowViewModelPropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (string.IsNullOrEmpty(e.PropertyName) || _forwardedPropertyNames.Contains(e.PropertyName))
-                RaisePropertyChanged(e.PropertyName);
+            if (string.IsNullOrEmpty(e.PropertyName) || this._forwardedPropertyNames.Contains(e.PropertyName))
+            {
+                this.RaisePropertyChanged(e.PropertyName);
+            }
         }
     }
 }

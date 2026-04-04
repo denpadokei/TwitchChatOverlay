@@ -1,7 +1,7 @@
-﻿using System;
+﻿using Prism.Ioc;
+using System;
 using System.Threading.Tasks;
 using System.Windows;
-using Prism.Ioc;
 using TwitchChatOverlay.Services;
 using TwitchChatOverlay.ViewModels;
 using TwitchChatOverlay.Views;
@@ -29,9 +29,13 @@ namespace TwitchChatOverlay
             AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
             {
                 if (args.ExceptionObject is Exception ex)
+                {
                     LogService.Error("致命的な未処理例外 (AppDomain.UnhandledException)", ex);
+                }
                 else
+                {
                     LogService.Error($"致命的な未処理例外 (AppDomain.UnhandledException): {args.ExceptionObject}");
+                }
                 // アプリ終了前にログを書き切る
                 LogService.Flush();
             };
@@ -54,24 +58,24 @@ namespace TwitchChatOverlay
 
         protected override Window CreateShell()
         {
-            return Container.Resolve<MainWindow>();
+            return this.Container.Resolve<MainWindow>();
         }
 
         protected override void RegisterTypes(IContainerRegistry containerRegistry)
         {
-            containerRegistry.RegisterSingleton<SettingsService>();
-            containerRegistry.RegisterSingleton<NotificationSoundService>();
-            containerRegistry.RegisterSingleton<TwitchApiService>();
-            containerRegistry.RegisterSingleton<TwitchEventSubService>();
-            containerRegistry.RegisterSingleton<ToastNotificationService>();
-            containerRegistry.RegisterSingleton<UpdateService>();
-            containerRegistry.RegisterSingleton<ObsWebSocketService>();
-            containerRegistry.RegisterInstance<YouTubeOAuthService>(new YouTubeOAuthService(BuildSecrets.YouTubeClientSecret));
-            containerRegistry.RegisterSingleton<YouTubeLiveChatService>();
-            containerRegistry.RegisterSingleton<MainWindowViewModel>();
-            containerRegistry.Register<CommonSettingsTabViewModel>();
-            containerRegistry.Register<TwitchSettingsTabViewModel>();
-            containerRegistry.Register<YouTubeSettingsTabViewModel>();
+            _ = containerRegistry.RegisterSingleton<SettingsService>();
+            _ = containerRegistry.RegisterSingleton<NotificationSoundService>();
+            _ = containerRegistry.RegisterSingleton<TwitchApiService>();
+            _ = containerRegistry.RegisterSingleton<TwitchEventSubService>();
+            _ = containerRegistry.RegisterSingleton<ToastNotificationService>();
+            _ = containerRegistry.RegisterSingleton<UpdateService>();
+            _ = containerRegistry.RegisterSingleton<ObsWebSocketService>();
+            _ = containerRegistry.RegisterInstance<YouTubeOAuthService>(new YouTubeOAuthService(BuildSecrets.YouTubeClientSecret));
+            _ = containerRegistry.RegisterSingleton<YouTubeLiveChatService>();
+            _ = containerRegistry.RegisterSingleton<MainWindowViewModel>();
+            _ = containerRegistry.Register<CommonSettingsTabViewModel>();
+            _ = containerRegistry.Register<TwitchSettingsTabViewModel>();
+            _ = containerRegistry.Register<YouTubeSettingsTabViewModel>();
         }
     }
 }
