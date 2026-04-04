@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - リフレッシュトークンによるアクセストークン更新メソッドを追加
 - YouTube Live Chat 受信を新規実装
   - `Services/YouTubeLiveChatService.cs` を追加
-  - `liveBroadcasts` から `liveChatId` を取得し、`liveChat/messages` をポーリング
+  - `liveBroadcasts` から `liveChatId` を取得し、`liveChatMessages.streamList` gRPC ストリームで受信
   - `textMessageEvent` / `superChatEvent` / `newSponsorEvent` / `memberMilestoneChatEvent` を `OverlayNotification` にマッピング
 - BuildSecrets の自動生成を拡張
   - `BuildSecrets.YouTubeClientId` を追加
@@ -50,10 +50,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `YouTubeOAuthService` / `YouTubeLiveChatService` の登録
   - タブViewの `RegisterForNavigation` を追加
 - YouTube 配信待機フローを OBS 連携対応へ拡張
-  - OBS 利用時は配信開始イベントを検出後に 30 秒間隔の待機ポーリングを開始
-  - OBS 未利用時は `ConnectYouTube` 実行時に 1 回だけ即時配信確認し、その後 30 秒間隔ポーリングへ移行
-- YouTube ポーリング失敗時の再試行戦略を改善
-  - `Retry-After` ヘッダー優先 + ジッター付き指数バックオフ（上限なし）を実装
+  - OBS 利用時は配信開始イベントを検出後に 30 秒間隔の配信確認を開始
+  - OBS 未利用時は `ConnectYouTube` 実行時に 1 回だけ即時配信確認し、その後 30 秒間隔の配信待機へ移行
+- YouTube Live Chat 受信経路を REST ポーリングから gRPC ストリーミングへ変更
+  - `Grpc.Net.Client` / `Google.Protobuf` / `Grpc.Tools` を導入
+  - `youtube_live_chat_stream.proto` から gRPC クライアントを生成
+  - `nextPageToken` を利用した gRPC ストリーム再開に対応
+  - 配信終了時は gRPC 切断を検出して待機状態へ戻るよう改善
+- YouTube 通信失敗時の再試行戦略を改善
+  - 配信確認は `Retry-After` ヘッダー優先 + ジッター付き指数バックオフ（上限なし）を実装
+  - gRPC ストリーム切断時も指数バックオフで再接続するよう改善
 - 設定暗号化を新フォーマットへ移行
   - フォーマット識別子（`TCOSET1`）付きの保存形式を導入
   - Windows DPAPI（CurrentUser）で暗号化保存するよう変更
@@ -77,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - YouTube OAuth / Live Chat 接続手順を追加
   - Twitch / YouTube Client ID の詳細取得手順を追加
   - Google Cloud 側の必須設定（OAuth同意画面・API有効化・loopback URI）を追記
+  - YouTube Live Chat の gRPC ストリーミング受信と配信待機の挙動を追記
 
 ---
 
