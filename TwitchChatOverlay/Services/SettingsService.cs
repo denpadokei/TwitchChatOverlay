@@ -47,7 +47,7 @@ namespace TwitchChatOverlay.Services
         public string NotificationSoundFilePath { get; set; } = "";
         public int NotificationSoundVolumePercent { get; set; } = 100;
         public string NotificationSoundOutputDeviceId { get; set; } = "";
-        public bool NotificationSoundEnabled { get; set; } = true;
+        public bool NotificationSoundEnabled { get; set; } = false;
 
         // 通知表示設定 (初期値: すべて表示)
         public bool ShowReward { get; set; } = true;
