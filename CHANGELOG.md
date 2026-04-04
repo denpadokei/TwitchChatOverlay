@@ -14,10 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.0] - 2026-04-03
 
 ### Added
-- MainWindow の設定UIを Prism RegionManager ベースのタブ構成へ移行
+- MainWindow の設定UIをタブ構成へ移行
   - `共通` / `Twitch` / `YouTube` の3タブを追加
   - 各タブを UserControl 化（`CommonSettingsTabView` / `TwitchSettingsTabView` / `YouTubeSettingsTabView`）
-  - `RegionNames` を追加して Region 名を定数管理
 - YouTube OAuth（Authorization Code + PKCE）を新規実装
   - `Services/YouTubeOAuthService.cs` を追加
   - ローカルコールバック (`http://127.0.0.1:18765/callback/`) でトークン取得

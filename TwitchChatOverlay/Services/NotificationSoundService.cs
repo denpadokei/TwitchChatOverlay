@@ -178,15 +178,6 @@ namespace TwitchChatOverlay.Services
             }
         }
 
-        private static Stream LoadEmbeddedSoundStream()
-        {
-            var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(EmbeddedSoundResourceName);
-            if (stream == null)
-                throw new FileNotFoundException($"埋め込み通知音リソースが見つかりません: {EmbeddedSoundResourceName}");
-
-            return stream;
-        }
-
         private static PlaybackHandle CreatePlayback(NotificationSoundSource soundSource, float volume, string outputDeviceId)
         {
             try

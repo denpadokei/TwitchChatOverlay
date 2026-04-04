@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using Prism.Mvvm;
@@ -5,10 +6,11 @@ using TwitchChatOverlay.Infrastructure;
 
 namespace TwitchChatOverlay.ViewModels
 {
-    public abstract class TabViewModelBase : BindableBase, IInitialized
+    public abstract class TabViewModelBase : BindableBase, IInitialized, IDisposable
     {
         private readonly HashSet<string> _forwardedPropertyNames;
         private bool _initialized;
+        private bool _disposed;
 
         protected TabViewModelBase(MainWindowViewModel mainWindowViewModel, params string[] forwardedPropertyNames)
         {
@@ -29,6 +31,23 @@ namespace TwitchChatOverlay.ViewModels
 
             foreach (var propertyName in _forwardedPropertyNames)
                 RaisePropertyChanged(propertyName);
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+
+            if (disposing)
+                MainWindowViewModel.PropertyChanged -= OnMainWindowViewModelPropertyChanged;
+
+            _disposed = true;
         }
 
         protected virtual void OnInitialize()

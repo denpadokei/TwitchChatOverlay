@@ -163,6 +163,22 @@ namespace TwitchChatOverlay.Services
                     }
                     catch (YouTubeApiException apiEx) when (apiEx.StatusCode != 401)
                     {
+                        // 403（権限不足/API未有効化/クォータ超過など）は恒久的エラーのため待機を終了
+                        if (apiEx.StatusCode == 403)
+                        {
+                            LogService.Warning($"YouTube 配信確認で権限/クォータエラー（{apiEx.StatusCode}）。待機を終了します。");
+                            if (!cancellationToken.IsCancellationRequested)
+                            {
+                                IsWaitingForBroadcast = false;
+                                ConnectionLost?.Invoke(this, new YouTubeConnectionLostEventArgs
+                                {
+                                    IsUnauthorized = false,
+                                    Message = $"YouTube API エラー ({apiEx.StatusCode}): {apiEx.Message}"
+                                });
+                            }
+                            return;
+                        }
+
                         var delay = CalculateBackoffDelay(++failureCount, apiEx.RetryAfter);
                         LogService.Warning($"YouTube 配信確認失敗: {apiEx.StatusCode}。{delay.TotalSeconds:F1}秒後に再試行します");
                         await Task.Delay(delay, cancellationToken);

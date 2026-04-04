@@ -114,6 +114,8 @@ namespace TwitchChatOverlay.ViewModels
         private Timer _validateTimer;
         /// <summary>次回タイマー設定用: refresh 直後の expires_in（秒）。0 のときはデフォルト値を使用。</summary>
         private int _nextRefreshExpiresIn;
+        /// <summary>前回 YouTube 接続時の waitForObsSignalBeforePolling オプション。サイレントリフレッシュ再接続に使用。</summary>
+        private bool _lastYouTubeWaitForObsSignal;
 
         public string Title
         {
@@ -536,6 +538,7 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = "YouTube自動接続中...";
                 var obsState = await TryPrepareObsAsync(settings);
                 bool waitForObsSignal = obsState.UseObsForDetection;
+                _lastYouTubeWaitForObsSignal = waitForObsSignal;
                 await _youTubeLiveChatService.ConnectAsync(
                     settings.YouTubeOAuthToken,
                     checkImmediately: !waitForObsSignal,
@@ -567,6 +570,7 @@ namespace TwitchChatOverlay.ViewModels
                     YouTubeTokenInfo = settings.YouTubeTokenInfo;
                     var obsState = await TryPrepareObsAsync(settings);
                     bool waitForObsSignal = obsState.UseObsForDetection;
+                    _lastYouTubeWaitForObsSignal = waitForObsSignal;
                     await _youTubeLiveChatService.ConnectAsync(
                         settings.YouTubeOAuthToken,
                         checkImmediately: !waitForObsSignal,
@@ -713,14 +717,23 @@ namespace TwitchChatOverlay.ViewModels
                 settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
                 _settingsService.SaveSettings(settings);
 
-                YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher != null)
+                    await dispatcher.InvokeAsync(() => YouTubeTokenInfo = settings.YouTubeTokenInfo);
+                else
+                    YouTubeTokenInfo = settings.YouTubeTokenInfo;
+
                 LogService.Debug($"[YouTube SilentRefresh] トークン更新成功");
 
-                // 接続中の場合は新トークンで再接続
+                // 接続中の場合は前回と同じ接続オプションで再接続
                 if (_youTubeLiveChatService.IsConnected || _youTubeLiveChatService.IsWaitingForBroadcast)
                 {
+                    bool waitForObsSignal = _lastYouTubeWaitForObsSignal;
                     LogService.Debug("[YouTube SilentRefresh] 接続中のため新トークンで再接続");
-                    await _youTubeLiveChatService.ConnectAsync(refreshed.AccessToken);
+                    await _youTubeLiveChatService.ConnectAsync(
+                        refreshed.AccessToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
                     UpdateYouTubeTokenRefreshTimerState();
                 }
             }
@@ -1457,6 +1470,7 @@ namespace TwitchChatOverlay.ViewModels
                 _settingsService.SaveSettings(settings);
                 var obsState = await TryPrepareObsAsync(settings);
                 bool waitForObsSignal = obsState.UseObsForDetection;
+                _lastYouTubeWaitForObsSignal = waitForObsSignal;
 
                 try
                 {
@@ -1536,6 +1550,7 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = "YouTube再接続中...";
                 var obsState = await TryPrepareObsAsync(settings);
                 bool waitForObsSignal = obsState.UseObsForDetection;
+                _lastYouTubeWaitForObsSignal = waitForObsSignal;
                 await _youTubeLiveChatService.ConnectAsync(
                     settings.YouTubeOAuthToken,
                     checkImmediately: !waitForObsSignal,

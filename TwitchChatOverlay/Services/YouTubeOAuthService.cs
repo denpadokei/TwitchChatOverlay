@@ -62,7 +62,20 @@ namespace TwitchChatOverlay.Services
 
             using var listener = new HttpListener();
             listener.Prefixes.Add(redirectUri);
-            listener.Start();
+            try
+            {
+                listener.Start();
+            }
+            catch (HttpListenerException ex)
+            {
+                var redirectUriInfo = new Uri(redirectUri);
+                string endpoint = $"{redirectUriInfo.Host}:{redirectUriInfo.Port}";
+                throw new InvalidOperationException(
+                    $"YouTube OAuth のローカルコールバック待受を開始できませんでした ({endpoint})。" +
+                    "このアドレス/ポートが他のアプリで使用中か、待受の権限が不足している可能性があります。" +
+                    "他のアプリを停止して再試行するか、URL ACL/実行権限の設定を確認してください。",
+                    ex);
+            }
 
             Process.Start(new ProcessStartInfo
             {
