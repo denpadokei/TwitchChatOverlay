@@ -543,8 +543,7 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? BuildYouTubeWaitingMessage(waitForObsSignal)
                     : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
-                if (!_youTubeLiveChatService.IsWaitingForBroadcast)
-                    StartYouTubeTokenRefreshTimer();
+                UpdateYouTubeTokenRefreshTimerState();
 
                 settings.YouTubeAutoConnectEnabled = true;
                 _settingsService.SaveSettings(settings);
@@ -575,8 +574,7 @@ namespace TwitchChatOverlay.ViewModels
                     YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                         ? BuildYouTubeWaitingMessage(waitForObsSignal)
                         : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
-                    if (!_youTubeLiveChatService.IsWaitingForBroadcast)
-                        StartYouTubeTokenRefreshTimer();
+                    UpdateYouTubeTokenRefreshTimerState();
 
                     settings.YouTubeAutoConnectEnabled = true;
                     _settingsService.SaveSettings(settings);
@@ -684,6 +682,18 @@ namespace TwitchChatOverlay.ViewModels
             _youtubeTokenRefreshTimer = null;
         }
 
+        private void UpdateYouTubeTokenRefreshTimerState()
+        {
+            if (_youTubeLiveChatService.IsWaitingForBroadcast)
+            {
+                StopYouTubeTokenRefreshTimer();
+                return;
+            }
+
+            if (_youTubeLiveChatService.IsConnected)
+                StartYouTubeTokenRefreshTimer();
+        }
+
         /// <summary>バックグラウンドでYouTubeトークンをリフレッシュし、接続中なら再接続する。</summary>
         private async Task RefreshYouTubeTokenSilentlyAsync()
         {
@@ -711,6 +721,7 @@ namespace TwitchChatOverlay.ViewModels
                 {
                     LogService.Debug("[YouTube SilentRefresh] 接続中のため新トークンで再接続");
                     await _youTubeLiveChatService.ConnectAsync(refreshed.AccessToken);
+                    UpdateYouTubeTokenRefreshTimerState();
                 }
             }
             catch (Exception ex)
@@ -1475,7 +1486,7 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? BuildYouTubeWaitingMessage(waitForObsSignal)
                     : BuildYouTubeConnectedMessage("✅ YouTube Live Chat 接続完了");
-                StartYouTubeTokenRefreshTimer();
+                UpdateYouTubeTokenRefreshTimerState();
             }
             catch (Exception ex)
             {
@@ -1532,7 +1543,7 @@ namespace TwitchChatOverlay.ViewModels
                 YouTubeStatusMessage = _youTubeLiveChatService.IsWaitingForBroadcast
                     ? BuildYouTubeWaitingMessage(waitForObsSignal)
                     : BuildYouTubeConnectedMessage("✅ YouTube再接続完了");
-                StartYouTubeTokenRefreshTimer();
+                UpdateYouTubeTokenRefreshTimerState();
             }
             catch (Exception ex)
             {
@@ -1584,7 +1595,7 @@ namespace TwitchChatOverlay.ViewModels
             Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
                 YouTubeStatusMessage = BuildYouTubeConnectedMessage("✅ YouTube Live Chat 接続完了");
-                StartYouTubeTokenRefreshTimer();
+                UpdateYouTubeTokenRefreshTimerState();
             });
         }
 
@@ -1595,6 +1606,7 @@ namespace TwitchChatOverlay.ViewModels
 
             Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
+                UpdateYouTubeTokenRefreshTimerState();
                 YouTubeStatusMessage = BuildYouTubeWaitingMessage(useObsForDetection);
             });
         }
