@@ -120,6 +120,12 @@
                 <CheckBox Content="🏁 ハイプトレイン終了" IsChecked="{Binding ShowHypeTrainEnd}" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,16,8"/>
             </WrapPanel>
 
+            <Button Content="💬 Twitch コメントをプレビュー"
+                    Command="{Binding PreviewTwitchCommentCommand}"
+                    Height="34"
+                    Margin="0,8,0,0"
+                    Style="{StaticResource PrimaryButtonStyle}"/>
+
             <ProgressBar Height="3"
                          Margin="0,6,0,0"
                          Background="{StaticResource BorderBrush}"

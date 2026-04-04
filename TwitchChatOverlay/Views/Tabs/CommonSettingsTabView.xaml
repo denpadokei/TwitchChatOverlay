@@ -153,6 +153,86 @@
                 <TextBlock Grid.Column="2" Text="  HEX (#RRGGBB)" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11"/>
             </Grid>
 
+            <TextBlock Text="🔊 コメント通知音"
+                       FontSize="13"
+                       FontWeight="Bold"
+                       Margin="0,18,0,10"
+                       Foreground="{StaticResource TwitchPurpleBrush}"/>
+
+            <CheckBox Content="コメント受信時に通知音を鳴らす"
+                      IsChecked="{Binding NotificationSoundEnabled}"
+                      Margin="0,0,0,8"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      FontSize="12"/>
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="音源" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <ComboBox Grid.Column="1" SelectedIndex="{Binding NotificationSoundSourceModeIndex}" Height="28" FontSize="12">
+                    <ComboBoxItem Content="埋め込み音源"/>
+                    <ComboBoxItem Content="ファイル指定"/>
+                </ComboBox>
+            </Grid>
+
+            <Grid Margin="0,8,0,0" Visibility="{Binding IsCustomNotificationSoundFile, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="82"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="音源ファイル" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <TextBox Grid.Column="1" Text="{Binding NotificationSoundFilePath, UpdateSourceTrigger=LostFocus}" Height="28" VerticalContentAlignment="Center" FontSize="12" ToolTip="wav / mp3 / ogg に対応"/>
+                <Button Grid.Column="2" Content="参照..." Command="{Binding BrowseNotificationSoundFileCommand}" Height="28" Margin="8,0,0,0" FontSize="12"/>
+            </Grid>
+
+            <TextBlock Text="対応形式: wav / mp3 / ogg"
+                       Margin="90,4,0,0"
+                       FontSize="11"
+                       Foreground="{StaticResource TextSecondaryBrush}"/>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="50"/>
+                    <ColumnDefinition Width="20"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="音量" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <Slider Grid.Column="1" Minimum="0" Maximum="100" Value="{Binding NotificationSoundVolumePercent}" VerticalAlignment="Center" IsSnapToTickEnabled="True" TickFrequency="5"/>
+                <TextBox Grid.Column="2" Text="{Binding NotificationSoundVolumePercent, UpdateSourceTrigger=LostFocus}" Height="24" Margin="4,0,0,0" VerticalContentAlignment="Center" TextAlignment="Right" FontSize="11"/>
+                <TextBlock Grid.Column="3" Text="%" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="2,0,0,0"/>
+            </Grid>
+
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="出力デバイス" VerticalAlignment="Center" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                <ComboBox Grid.Column="1"
+                          ItemsSource="{Binding AudioOutputDevices}"
+                          DisplayMemberPath="DisplayName"
+                          SelectedValuePath="Id"
+                          SelectedValue="{Binding NotificationSoundOutputDeviceId}"
+                          Height="28"
+                          FontSize="12"/>
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                <Button Content="🔊 音声をプレビュー"
+                        Command="{Binding PreviewNotificationSoundCommand}"
+                        Height="34"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Content="💬 表示をプレビュー"
+                        Command="{Binding PreviewCommonCommentCommand}"
+                        Height="34"
+                        Style="{StaticResource PrimaryButtonStyle}"/>
+            </StackPanel>
+
             <Separator Margin="0,14,0,12" Background="{StaticResource BorderBrush}"/>
         </StackPanel>
     </ScrollViewer>

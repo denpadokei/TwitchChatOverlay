@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Services/ObsWebSocketService.cs` を追加
   - OBS との接続・認証・`StreamStateChanged` イベント監視を実装
   - `App.xaml.cs` の DI に `ObsWebSocketService` を登録
+- コメント通知音機能を追加
+  - `Services/NotificationSoundService.cs` を追加
+  - コメント受信時に通知音を再生できるよう対応
+  - 埋め込み音源を既定値として追加し、外部音源ファイルの指定にも対応
+  - 対応形式: `wav` / `mp3` / `ogg`
+  - 出力音声デバイス選択と音量調整に対応
+- 設定画面にプレビュー機能を追加
+  - 共通タブに通知音プレビューと表示プレビューを追加
+  - Twitch タブにコメント表示プレビューを追加
+  - YouTube タブにコメント表示プレビューを追加
 
 ### Changed
 - `MainWindow.xaml` の直書き設定UIを削除し、タブ+Regionホスト構成へ変更
@@ -64,6 +74,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - フォーマット識別子（`TCOSET1`）付きの保存形式を導入
   - Windows DPAPI（CurrentUser）で暗号化保存するよう変更
   - 旧 AES-CBC 形式設定の自動移行を追加
+- `CommonSettingsTabView` に通知音設定 UI を追加
+  - 通知音 ON/OFF
+  - 埋め込み音源 / ファイル指定の切り替え
+  - 音量スライダー
+  - 出力音声デバイス一覧
+- プレビュー操作時に保存前の設定値をそのまま反映するよう変更
+  - 通知音プレビューで現在の音量・出力デバイス・音源選択を即時反映
+  - コメント表示プレビューで現在のトースト外観設定を確認可能
 
 ### Fixed
 - YouTube接続の耐障害性を改善
@@ -77,6 +95,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - YouTube 重複通知の抑制を改善
   - 既読メッセージID管理を全消去方式から固定長キュー方式へ変更
   - 長時間配信での重複再通知リスクを低減
+- 埋め込み MP3 通知音の再生失敗を修正
+  - ID3 タグを持たない埋め込み MP3 でも再生できるよう、ローカルキャッシュへ展開して再生する方式に変更
+- 通知音プレビューで保存前の音量調整が効かない不具合を修正
 
 ### Docs
 - `README.md` を Twitch + YouTube 対応内容に更新
@@ -84,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Twitch / YouTube Client ID の詳細取得手順を追加
   - Google Cloud 側の必須設定（OAuth同意画面・API有効化・loopback URI）を追記
   - YouTube Live Chat の gRPC ストリーミング受信と配信待機の挙動を追記
+  - 通知音設定、プレビュー機能、追加ライブラリの説明を追記
 
 ---
 

@@ -67,6 +67,12 @@
                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,16,8"/>
             </WrapPanel>
 
+                <Button Content="💬 YouTube コメントをプレビュー"
+                    Command="{Binding PreviewYouTubeCommentCommand}"
+                    Height="34"
+                    Margin="0,8,0,0"
+                    Style="{StaticResource PrimaryButtonStyle}"/>
+
             <Separator Margin="0,16,0,12" Background="{StaticResource BorderBrush}"/>
 
             <TextBlock Text="🎬 OBS 連携"

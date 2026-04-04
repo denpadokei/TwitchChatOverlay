@@ -10,6 +10,7 @@ namespace TwitchChatOverlay.Services
     public class ToastNotificationService
     {
         private readonly SettingsService _settingsService;
+        private readonly NotificationSoundService _notificationSoundService;
         private readonly List<ToastNotificationWindow> _activeToasts = new();
 
         private const double ToastHeight = 90;  // ActualHeight が取得できない場合の推定値
@@ -47,9 +48,10 @@ namespace TwitchChatOverlay.Services
             );
         }
 
-        public ToastNotificationService(SettingsService settingsService)
+        public ToastNotificationService(SettingsService settingsService, NotificationSoundService notificationSoundService)
         {
             _settingsService = settingsService;
+            _notificationSoundService = notificationSoundService;
         }
 
         public void Initialize(TwitchEventSubService twitchEventSubService, YouTubeLiveChatService youTubeLiveChatService)
@@ -58,10 +60,37 @@ namespace TwitchChatOverlay.Services
             youTubeLiveChatService.NotificationReceived += OnNotificationReceived;
         }
 
+        public void ShowPreviewNotification(OverlayNotification notification)
+        {
+            if (notification == null)
+                return;
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    ShowToast(notification);
+                }
+                catch (Exception ex)
+                {
+                    LogService.Error("プレビュー通知の表示中にエラーが発生しました", ex);
+                }
+            });
+        }
+
         private void OnNotificationReceived(object sender, OverlayNotification notification)
         {
             if (!ShouldShow(notification))
                 return;
+
+            try
+            {
+                _notificationSoundService.PlayNotificationSound(notification);
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("通知音の再生中にエラーが発生しました", ex);
+            }
 
             Application.Current.Dispatcher.Invoke(() =>
             {

@@ -22,6 +22,15 @@ Twitch / YouTube のチャンネルイベントを Windows デスクトップに
 - 接続中に切断された場合、自動でトークン更新・再接続
 - 接続履歴の保存（最大10件）とワンクリック切り替え
 - Twitch エモート表示対応（静止画・アニメーション GIF）
+- コメント通知音に対応
+  - 通知音 ON/OFF
+  - 埋め込み音源 / 外部ファイル切り替え
+  - `wav` / `mp3` / `ogg` の再生
+  - 音量調整
+  - 出力音声デバイス選択
+- プレビュー機能に対応
+  - 共通タブから通知音プレビュー
+  - 共通 / Twitch / YouTube タブからコメント表示プレビュー
 - 設定はフォーマット識別子付きで暗号化して保存（Windows DPAPI + 旧形式自動移行）
 
 ## 動作環境
@@ -204,6 +213,8 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 | YouTube通知 ON/OFF | YouTube Chat / Super Chat / Membership の表示切替 |
 | 表示時間 (秒) | トーストが消えるまでの秒数（1〜30秒） |
 | 最大同時表示 | 同時に表示するトーストの最大数（1〜10件） |
+| 通知音 ON/OFF | コメント受信時の通知音を有効 / 無効に切り替え |
+| 通知音プレビュー | 現在の音源・音量・出力デバイス設定で試聴 |
 
 ### トースト外観設定
 
@@ -216,6 +227,16 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 | 背景の濃さ | 0〜100%（スライダーまたは直接入力） |
 | フォント | プリセットから選択または直接入力（空白でシステムデフォルト） |
 | 背景色 | ダーク / ライト / システム設定 / カスタム（HEX指定）から選択 |
+| 表示プレビュー | 共通 / Twitch / YouTube 各タブから現在の見え方を確認 |
+
+### 通知音設定
+
+| 設定 | 説明 |
+|------|------|
+| 音源 | 埋め込み音源または外部ファイルを選択 |
+| 音源ファイル | 任意の `wav` / `mp3` / `ogg` ファイルを指定 |
+| 音量 | 0〜100% で調整 |
+| 出力デバイス | 既定の出力デバイスまたは任意の音声デバイスを選択 |
 
 設定変更後は **「💾 設定を保存」** ボタンで保存してください。
 
@@ -235,6 +256,8 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 |-----------|-----------|------|
 | [Grpc.Net.Client](https://github.com/grpc/grpc-dotnet) | 2.70.0 | YouTube Live Chat gRPC クライアント |
 | [Google.Protobuf](https://github.com/protocolbuffers/protobuf) | 3.28.0 | Protocol Buffers メッセージ定義 |
+| [NAudio](https://github.com/naudio/NAudio) | 2.2.1 | 通知音再生 / 音声デバイス選択 |
+| [NAudio.Vorbis](https://github.com/naudio/Vorbis) | 1.5.0 | OGG 再生 |
 | [Prism.DryIoc](https://github.com/PrismLibrary/Prism) | 8.1.97 | MVVM / DI |
 | [Newtonsoft.Json](https://www.newtonsoft.com/json) | 13.0.3 | JSON解析 |
 | [XamlAnimatedGif](https://github.com/XamlAnimatedGif/XamlAnimatedGif) | 2.3.1 | アニメーションGIF表示 |

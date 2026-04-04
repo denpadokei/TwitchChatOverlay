@@ -9,6 +9,7 @@ namespace TwitchChatOverlay.Services
     public enum ToastPosition { TopRight = 0, TopLeft = 1, BottomRight = 2, BottomLeft = 3 }
     public enum ToastBackgroundMode { Dark = 0, Light = 1, System = 2, Custom = 3 }
     public enum ToastFontColorMode { Auto = 0, Custom = 1 }
+    public enum NotificationSoundSourceMode { Embedded = 0, CustomFile = 1 }
 
     public class AppSettings
     {
@@ -42,6 +43,11 @@ namespace TwitchChatOverlay.Services
         public ToastFontColorMode ToastFontColorMode { get; set; } = ToastFontColorMode.Auto;
         /// <summary>フォント色モードが Custom のときに使用する文字色（HEX カラー形式: #RRGGBB）</summary>
         public string ToastCustomFontColor { get; set; } = "#FFFFFF";
+        public NotificationSoundSourceMode NotificationSoundSourceMode { get; set; } = NotificationSoundSourceMode.Embedded;
+        public string NotificationSoundFilePath { get; set; } = "";
+        public int NotificationSoundVolumePercent { get; set; } = 100;
+        public string NotificationSoundOutputDeviceId { get; set; } = "";
+        public bool NotificationSoundEnabled { get; set; } = true;
 
         // 通知表示設定 (初期値: すべて表示)
         public bool ShowReward { get; set; } = true;

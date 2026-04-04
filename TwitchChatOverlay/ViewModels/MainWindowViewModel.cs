@@ -4,10 +4,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.Win32;
 using Prism.Commands;
 using Prism.Mvvm;
 using Prism.Regions;
 using TwitchChatOverlay.Infrastructure;
+using TwitchChatOverlay.Models;
 using TwitchChatOverlay.Services;
 using WinForms = System.Windows.Forms;
 
@@ -44,6 +46,11 @@ namespace TwitchChatOverlay.ViewModels
         private string _toastCustomBackgroundColor = "#1A1A2E";
         private int _toastFontColorModeIndex = 0;
         private string _toastCustomFontColor = "#FFFFFF";
+        private int _notificationSoundSourceModeIndex = 0;
+        private string _notificationSoundFilePath = "";
+        private int _notificationSoundVolumePercent = 100;
+        private string _notificationSoundOutputDeviceId = "";
+        private bool _notificationSoundEnabled = true;
         private int _selectedTabIndex;
         private bool _showYouTubeChat = true;
         private bool _showYouTubeSuperChat = true;
@@ -61,6 +68,7 @@ namespace TwitchChatOverlay.ViewModels
         private bool _regionInitializationRetryScheduled;
 
         public ObservableCollection<string> MonitorList { get; } = new();
+    public ObservableCollection<AudioOutputDeviceOption> AudioOutputDevices { get; } = new();
 
         public ObservableCollection<string> RecentChannels { get; } = new();
 
@@ -103,6 +111,7 @@ namespace TwitchChatOverlay.ViewModels
         private readonly ToastNotificationService _toastService;
         private readonly SettingsService _settingsService;
         private readonly UpdateService _updateService;
+        private readonly NotificationSoundService _notificationSoundService;
         private readonly YouTubeOAuthService _youTubeOAuthService;
         private readonly YouTubeLiveChatService _youTubeLiveChatService;
         private readonly ObsWebSocketService _obsWebSocketService;
@@ -316,6 +325,42 @@ namespace TwitchChatOverlay.ViewModels
             set => SetProperty(ref _toastCustomFontColor, value);
         }
 
+        public int NotificationSoundSourceModeIndex
+        {
+            get => _notificationSoundSourceModeIndex;
+            set
+            {
+                SetProperty(ref _notificationSoundSourceModeIndex, value);
+                RaisePropertyChanged(nameof(IsCustomNotificationSoundFile));
+            }
+        }
+
+        public bool IsCustomNotificationSoundFile => _notificationSoundSourceModeIndex == 1;
+
+        public bool NotificationSoundEnabled
+        {
+            get => _notificationSoundEnabled;
+            set => SetProperty(ref _notificationSoundEnabled, value);
+        }
+
+        public string NotificationSoundFilePath
+        {
+            get => _notificationSoundFilePath;
+            set => SetProperty(ref _notificationSoundFilePath, value);
+        }
+
+        public int NotificationSoundVolumePercent
+        {
+            get => _notificationSoundVolumePercent;
+            set => SetProperty(ref _notificationSoundVolumePercent, Math.Clamp(value, 0, 100));
+        }
+
+        public string NotificationSoundOutputDeviceId
+        {
+            get => _notificationSoundOutputDeviceId;
+            set => SetProperty(ref _notificationSoundOutputDeviceId, value ?? "");
+        }
+
         public System.Collections.Generic.List<string> FontFamilyPresets { get; } = new()
         {
             "",
@@ -337,6 +382,11 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand SelectRecentChannelCommand { get; }
         public ICommand UpdateCommand { get; }
         public ICommand OpenReleasePageCommand { get; }
+        public ICommand BrowseNotificationSoundFileCommand { get; }
+        public ICommand PreviewNotificationSoundCommand { get; }
+        public ICommand PreviewCommonCommentCommand { get; }
+        public ICommand PreviewTwitchCommentCommand { get; }
+        public ICommand PreviewYouTubeCommentCommand { get; }
         public ICommand AuthorizeYouTubeOAuthCommand { get; }
         public ICommand ConnectYouTubeCommand { get; }
         public ICommand DisconnectYouTubeCommand { get; }
@@ -407,6 +457,7 @@ namespace TwitchChatOverlay.ViewModels
             TwitchEventSubService eventSubService,
             ToastNotificationService toastService,
             UpdateService updateService,
+            NotificationSoundService notificationSoundService,
             YouTubeOAuthService youTubeOAuthService,
             YouTubeLiveChatService youTubeLiveChatService,
             ObsWebSocketService obsWebSocketService)
@@ -416,6 +467,7 @@ namespace TwitchChatOverlay.ViewModels
             _eventSubService = eventSubService;
             _toastService = toastService;
             _updateService = updateService;
+            _notificationSoundService = notificationSoundService;
             _youTubeOAuthService = youTubeOAuthService;
             _youTubeLiveChatService = youTubeLiveChatService;
             _obsWebSocketService = obsWebSocketService;
@@ -432,6 +484,11 @@ namespace TwitchChatOverlay.ViewModels
                 () => _updateService.OpenReleasePage(_updateReleasePageUrl),
                 () => !string.IsNullOrEmpty(_updateReleasePageUrl))
                 .ObservesProperty(() => IsUpdateAvailable);
+            BrowseNotificationSoundFileCommand = new DelegateCommand(BrowseNotificationSoundFile);
+            PreviewNotificationSoundCommand = new DelegateCommand(PreviewNotificationSound);
+            PreviewCommonCommentCommand = new DelegateCommand(PreviewCommonComment);
+            PreviewTwitchCommentCommand = new DelegateCommand(PreviewTwitchComment);
+            PreviewYouTubeCommentCommand = new DelegateCommand(PreviewYouTubeComment);
             AuthorizeYouTubeOAuthCommand = new DelegateCommand(AuthorizeYouTubeOAuth);
             ConnectYouTubeCommand = new DelegateCommand(ConnectYouTube);
             DisconnectYouTubeCommand = new DelegateCommand(DisconnectYouTube);
@@ -453,6 +510,8 @@ namespace TwitchChatOverlay.ViewModels
                 string label = $"モニター {i + 1}{(s.Primary ? " (プライマリ)" : "")} {s.Bounds.Width}x{s.Bounds.Height}";
                 MonitorList.Add(label);
             }
+
+            ReloadAudioOutputDevices();
 
             LoadSettings();
             _ = ValidateSavedTokenAsync();
@@ -1188,6 +1247,11 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ToastCustomBackgroundColor = ToastCustomBackgroundColor;
                 settings.ToastFontColorMode = (Services.ToastFontColorMode)ToastFontColorModeIndex;
                 settings.ToastCustomFontColor = ToastCustomFontColor;
+                settings.NotificationSoundSourceMode = (Services.NotificationSoundSourceMode)NotificationSoundSourceModeIndex;
+                settings.NotificationSoundFilePath = NotificationSoundFilePath ?? "";
+                settings.NotificationSoundVolumePercent = NotificationSoundVolumePercent;
+                settings.NotificationSoundOutputDeviceId = NotificationSoundOutputDeviceId ?? "";
+                settings.NotificationSoundEnabled = NotificationSoundEnabled;
 
                 _settingsService.SaveSettings(settings);
                 StatusMessage = "✅ 設定を保存しました";
@@ -1245,12 +1309,158 @@ namespace TwitchChatOverlay.ViewModels
                 ToastCustomFontColor = string.IsNullOrEmpty(settings.ToastCustomFontColor)
                     ? "#FFFFFF"
                     : settings.ToastCustomFontColor;
+                NotificationSoundSourceModeIndex = (int)settings.NotificationSoundSourceMode;
+                NotificationSoundFilePath = settings.NotificationSoundFilePath ?? "";
+                NotificationSoundVolumePercent = Math.Clamp(settings.NotificationSoundVolumePercent, 0, 100);
+                NotificationSoundOutputDeviceId = ResolveAudioOutputDeviceId(settings.NotificationSoundOutputDeviceId);
+                NotificationSoundEnabled = settings.NotificationSoundEnabled;
             }
             catch (Exception ex)
             {
                 LogService.Error("設定の読み込みに失敗しました", ex);
                 StatusMessage = $"設定の読み込みに失敗: {ex.Message}";
             }
+        }
+
+        private void ReloadAudioOutputDevices()
+        {
+            AudioOutputDevices.Clear();
+            foreach (var device in _notificationSoundService.GetOutputDevices())
+                AudioOutputDevices.Add(device);
+        }
+
+        private string ResolveAudioOutputDeviceId(string deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+                return "";
+
+            foreach (var device in AudioOutputDevices)
+            {
+                if (string.Equals(device.Id, deviceId, StringComparison.Ordinal))
+                    return deviceId;
+            }
+
+            return "";
+        }
+
+        private void BrowseNotificationSoundFile()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "通知音ファイルを選択",
+                Filter = "音声ファイル (*.wav;*.mp3;*.ogg)|*.wav;*.mp3;*.ogg|WAV (*.wav)|*.wav|MP3 (*.mp3)|*.mp3|OGG (*.ogg)|*.ogg",
+                CheckFileExists = true,
+                Multiselect = false,
+            };
+
+            if (!string.IsNullOrWhiteSpace(NotificationSoundFilePath))
+                dialog.FileName = NotificationSoundFilePath;
+
+            bool? result = dialog.ShowDialog();
+            if (result != true)
+                return;
+
+            NotificationSoundFilePath = dialog.FileName;
+            NotificationSoundSourceModeIndex = 1;
+            StatusMessage = "通知音ファイルを選択しました。設定を保存すると反映されます。";
+        }
+
+        private void PreviewNotificationSound()
+        {
+            try
+            {
+                _notificationSoundService.PlayPreviewSound(new AppSettings
+                {
+                    NotificationSoundEnabled = NotificationSoundEnabled,
+                    NotificationSoundSourceMode = (Services.NotificationSoundSourceMode)NotificationSoundSourceModeIndex,
+                    NotificationSoundFilePath = NotificationSoundFilePath ?? "",
+                    NotificationSoundVolumePercent = NotificationSoundVolumePercent,
+                    NotificationSoundOutputDeviceId = NotificationSoundOutputDeviceId ?? "",
+                });
+                StatusMessage = "通知音をプレビュー再生しました";
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("通知音プレビューの再生に失敗しました", ex);
+                StatusMessage = $"通知音プレビューの再生に失敗: {ex.Message}";
+            }
+        }
+
+        private void PreviewCommonComment()
+        {
+            PreviewComment(CreateCommonPreviewNotification(), "共通設定の表示プレビューを表示しました");
+        }
+
+        private void PreviewTwitchComment()
+        {
+            PreviewComment(CreateTwitchPreviewNotification(), "Twitch コメントプレビューを表示しました");
+        }
+
+        private void PreviewYouTubeComment()
+        {
+            PreviewComment(CreateYouTubePreviewNotification(), "YouTube コメントプレビューを表示しました");
+        }
+
+        private void PreviewComment(OverlayNotification notification, string successMessage)
+        {
+            try
+            {
+                _toastService.ShowPreviewNotification(notification);
+                StatusMessage = successMessage;
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("コメントプレビューの表示に失敗しました", ex);
+                StatusMessage = $"コメントプレビューの表示に失敗: {ex.Message}";
+            }
+        }
+
+        private static OverlayNotification CreateCommonPreviewNotification()
+        {
+            return new OverlayNotification
+            {
+                SourcePlatform = "Preview",
+                Type = NotificationType.Chat,
+                Username = "Overlay Preview",
+                DisplayText = "共通設定のフォントや背景がこの見た目で反映されます。",
+                UserColor = "#4CAF50",
+                Fragments = new System.Collections.Generic.List<object>
+                {
+                    new TextFragment { Text = "共通設定のフォントや背景がこの見た目で反映されます。" }
+                }
+            };
+        }
+
+        private static OverlayNotification CreateTwitchPreviewNotification()
+        {
+            return new OverlayNotification
+            {
+                SourcePlatform = "Twitch",
+                Type = NotificationType.Chat,
+                Username = "twitch_user_01",
+                DisplayText = "今日は配信ありがとう！このコメント表示で確認できます。",
+                UserColor = "#9146FF",
+                Fragments = new System.Collections.Generic.List<object>
+                {
+                    new TextFragment { Text = "今日は配信ありがとう！このコメント表示で確認できます。" }
+                }
+            };
+        }
+
+        private static OverlayNotification CreateYouTubePreviewNotification()
+        {
+            return new OverlayNotification
+            {
+                SourcePlatform = "YouTube",
+                Type = NotificationType.Chat,
+                Username = "YouTube Viewer",
+                DisplayText = "このプレビューで YouTube コメントの見え方を確認できます。",
+                UserColor = "#FF3B30",
+                Fragments = new System.Collections.Generic.List<object>
+                {
+                    new TextFragment { Text = "このプレビューで YouTube コメントの見え方を確認できます。" }
+                }
+            };
         }
 
         private async void AuthorizeYouTubeOAuth()

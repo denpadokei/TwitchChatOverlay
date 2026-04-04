@@ -60,6 +60,7 @@ namespace TwitchChatOverlay
         protected override void RegisterTypes(IContainerRegistry containerRegistry)
         {
             containerRegistry.RegisterSingleton<SettingsService>();
+            containerRegistry.RegisterSingleton<NotificationSoundService>();
             containerRegistry.RegisterSingleton<TwitchApiService>();
             containerRegistry.RegisterSingleton<TwitchEventSubService>();
             containerRegistry.RegisterSingleton<ToastNotificationService>();

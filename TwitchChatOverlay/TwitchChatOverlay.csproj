@@ -27,6 +27,8 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
     <PackageReference Include="Prism.DryIoc" Version="8.1.97" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="XamlAnimatedGif" Version="2.3.1" />
@@ -34,6 +36,10 @@
 
   <ItemGroup>
     <Protobuf Include="Protos\youtube_live_chat_stream.proto" GrpcServices="Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="NotificationSound\NotificationSound.mp3" />
   </ItemGroup>
 
   <!-- ビルド前にシークレットを含むC#ファイルを自動生成するターゲット -->
