@@ -45,7 +45,7 @@ namespace TwitchChatOverlay.Services
 #if DEBUG
             var v = new Version(0, 0, 1);
 #else
-            var v = Assembly.GetExecutingAssembly().GetName().Version;
+            var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
 #endif
             return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
         }
