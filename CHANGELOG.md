@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - リフレッシュトークンによるアクセストークン更新メソッドを追加
 - YouTube Live Chat 受信を新規実装
   - `Services/YouTubeLiveChatService.cs` を追加
-  - `liveBroadcasts` から `liveChatId` を取得し、`liveChatMessages.streamList` gRPC ストリームで受信
+  - `liveBroadcasts` から `liveChatId` を取得（待機時は HTTP ポーリング）
+  - メッセージ受信は gRPC ストリーム（`StreamList`）を使用
   - `textMessageEvent` / `superChatEvent` / `newSponsorEvent` / `memberMilestoneChatEvent` を `OverlayNotification` にマッピング
 - BuildSecrets の自動生成を拡張
   - `BuildSecrets.YouTubeClientId` を追加

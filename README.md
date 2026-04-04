@@ -5,7 +5,7 @@ Twitch / YouTube のチャンネルイベントを Windows デスクトップに
 ## 機能
 
 - **EventSub WebSocket** で Twitch イベントをリアルタイム受信
-- `liveChatMessages.streamList` gRPC ストリームで YouTube Live Chat を低遅延受信
+- YouTube は**配信検出（liveChatId解決）をポーリング**し、**チャット / イベント受信は gRPC ストリーム**で処理
 - `liveBroadcasts` による配信確認で YouTube の配信開始を待機
 - 以下のイベントをトースト通知で表示：
   - チャットメッセージ
