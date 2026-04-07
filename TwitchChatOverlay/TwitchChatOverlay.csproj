@@ -19,6 +19,7 @@
     <AssemblyTitle>TwitchChatOverlay</AssemblyTitle>
     <Company>denpadokei</Company>
     <Product>TwitchChatOverlay</Product>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Google.Protobuf" Version="3.28.0" />
@@ -47,6 +48,10 @@
     <Content Include="Docs\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="icon.ico" />
   </ItemGroup>
 
   <!-- ビルド前にシークレットを含むC#ファイルを自動生成するターゲット -->
