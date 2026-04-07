@@ -42,6 +42,19 @@ jobs:
           -p:YouTubeClientSecret=${{ secrets.YOUTUBE_CLIENT_SECRET }}
           --output ./publish/release
 
+      - name: Verify Release bundled policy docs
+        run: |
+          $requiredFiles = @(
+            './publish/release/Docs/PrivacyPolicy.html',
+            './publish/release/Docs/TermsOfUse.html'
+          )
+
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path $file)) {
+              throw "Required bundled document is missing from release publish output: $file"
+            }
+          }
+
       - name: Publish Debug (self-contained, single file)
         run: >
           dotnet publish TwitchChatOverlay/TwitchChatOverlay.csproj
@@ -54,6 +67,19 @@ jobs:
           -p:YouTubeClientId=${{ secrets.YOUTUBE_CLIENT_ID }}
           -p:YouTubeClientSecret=${{ secrets.YOUTUBE_CLIENT_SECRET }}
           --output ./publish/debug
+
+      - name: Verify Debug bundled policy docs
+        run: |
+          $requiredFiles = @(
+            './publish/debug/Docs/PrivacyPolicy.html',
+            './publish/debug/Docs/TermsOfUse.html'
+          )
+
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path $file)) {
+              throw "Required bundled document is missing from debug publish output: $file"
+            }
+          }
 
       - name: Upload Release artifact
         uses: actions/upload-artifact@v4

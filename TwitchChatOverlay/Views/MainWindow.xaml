@@ -5,8 +5,8 @@
         xmlns:tabs="clr-namespace:TwitchChatOverlay.Views.Tabs"
         prism:ViewModelLocator.AutoWireViewModel="True"
         Title="Twitch Chat Overlay"
-        Height="760"
-        Width="480"
+        Height="1060"
+        Width="820"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BackgroundBrush}">
     <Grid Background="{StaticResource BackgroundBrush}">

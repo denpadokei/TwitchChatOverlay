@@ -34,6 +34,7 @@ namespace TwitchChatOverlay.Services
     {
         private const string AuthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
         private const string TokenEndpoint = "https://oauth2.googleapis.com/token";
+        private const string RevokeEndpoint = "https://oauth2.googleapis.com/revoke";
         private static readonly HttpClient Http = new();
 
         private readonly string[] _scopes =
@@ -160,6 +161,26 @@ namespace TwitchChatOverlay.Services
             }
 
             return token;
+        }
+
+        public async Task RevokeTokenAsync(string token, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("取り消し対象の YouTube トークンがありません。");
+            }
+
+            using var request = new FormUrlEncodedContent(
+            [
+                new KeyValuePair<string, string>("token", token)
+            ]);
+
+            var response = await Http.PostAsync(RevokeEndpoint, request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"YouTube OAuth トークン取り消し失敗: {(int)response.StatusCode} {body}");
+            }
         }
 
         private string BuildAuthorizationUrl(string clientId, string redirectUri, string state, string codeChallenge)

@@ -43,6 +43,12 @@
     <EmbeddedResource Include="NotificationSound\NotificationSound.mp3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="Docs\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- ビルド前にシークレットを含むC#ファイルを自動生成するターゲット -->
   <Target Name="GenerateBuildSecrets" BeforeTargets="CoreCompile">
     <PropertyGroup>

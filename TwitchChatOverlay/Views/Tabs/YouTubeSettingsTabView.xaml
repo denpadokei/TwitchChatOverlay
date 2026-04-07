@@ -30,16 +30,89 @@
                     CornerRadius="6"
                     Padding="12,8"
                     Margin="0,0,0,8">
-                <TextBlock Text="{Binding YouTubeTokenInfo}"
+                <StackPanel>
+                    <TextBlock Text="{Binding YouTubeTokenInfo}"
                            Foreground="#CCCCCC"
-                           FontSize="12"/>
+                           FontSize="12"
+                           Margin="0,0,0,6"/>
+                    <TextBlock Text="この機能は YouTube API Services を使用し、YouTube Live Chat の読み取り専用権限のみを要求します。取得したアクセストークンとリフレッシュトークンは Windows の保護機能を使ってローカル保存されます。"
+                           Foreground="#CCCCCC"
+                           TextWrapping="Wrap"
+                           FontSize="11"/>
+                </StackPanel>
             </Border>
+
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0" Grid.Column="0"
+                        Content="プライバシーポリシー"
+                        Command="{Binding OpenPrivacyPolicyCommand}"
+                    Height="36"
+                        Margin="0,0,8,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="0" Grid.Column="1"
+                        Content="利用条件"
+                        Command="{Binding OpenTermsOfUseCommand}"
+                    Height="36"
+                        Margin="0,0,0,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="1" Grid.Column="0"
+                        Content="YouTube 利用規約"
+                        Command="{Binding OpenYouTubeTermsCommand}"
+                    Height="36"
+                        Margin="0,0,8,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="1" Grid.Column="1"
+                        Content="Google Privacy"
+                        Command="{Binding OpenGooglePrivacyPolicyCommand}"
+                    Height="36"
+                        Margin="0,0,0,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="2" Grid.Column="0"
+                        Content="権限管理"
+                        Command="{Binding OpenGooglePermissionsCommand}"
+                    Height="36"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+            </Grid>
+
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <CheckBox Grid.Column="0"
+                              IsChecked="{Binding YouTubeLegalConsentAccepted}"
+                              VerticalAlignment="Top"
+                              Margin="0,2,8,0"/>
+                    <TextBlock Grid.Column="1"
+                               Text="プライバシーポリシー、利用条件、YouTube 利用規約を確認し、YouTube API Services の利用に同意します"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Center"/>
+                </Grid>
 
             <Button Content="🌐 YouTubeで認可する"
                     Command="{Binding AuthorizeYouTubeOAuthCommand}"
                     Height="38"
                     Style="{StaticResource PrimaryButtonStyle}"
                     Margin="0,0,0,8"/>
+
+                <TextBlock Text="YouTube コンテンツとデータの提供元は YouTube です。保存済みデータの削除後も、Google アカウント側の権限は別途取り消しが必要になる場合があります。"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       FontSize="11"
+                       Margin="0,0,0,8"/>
 
             <Separator Margin="0,12,0,12" Background="{StaticResource BorderBrush}"/>
 
@@ -83,6 +156,49 @@
                     Style="{StaticResource PrimaryButtonStyle}"/>
 
             <Separator Margin="0,16,0,12" Background="{StaticResource BorderBrush}"/>
+
+        <TextBlock Text="🧹 認可の削除と取り消し"
+               FontSize="13" FontWeight="Bold"
+               Margin="0,0,0,10"
+               Foreground="#FF3B30"/>
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0" Grid.Column="0"
+                        Content="ローカル保存データを削除"
+                        Command="{Binding ClearYouTubeAuthorizationCommand}"
+                    Height="38"
+                        Margin="0,0,8,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="0" Grid.Column="1"
+                        Content="Google 権限を取り消して削除"
+                        Command="{Binding RevokeYouTubeAuthorizationCommand}"
+                    Height="38"
+                        Margin="0,0,0,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="1" Grid.Column="0"
+                        Content="サポート窓口"
+                        Command="{Binding OpenSupportCommand}"
+                    Height="38"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+            </Grid>
+
+        <TextBlock Text="ローカル削除はこの PC に保存されたトークンのみ削除します。Google 側のアクセス権も止める場合は、権限取り消し操作または Google 権限管理ページを使用してください。"
+               Foreground="{StaticResource TextSecondaryBrush}"
+               TextWrapping="Wrap"
+               FontSize="11"
+               Margin="0,0,0,8"/>
+
+        <Separator Margin="0,16,0,12" Background="{StaticResource BorderBrush}"/>
 
             <TextBlock Text="🎬 OBS 連携"
                        FontSize="13" FontWeight="Bold"

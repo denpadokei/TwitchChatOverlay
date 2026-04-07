@@ -243,6 +243,47 @@
             </StackPanel>
 
             <Separator Margin="0,14,0,12" Background="{StaticResource BorderBrush}"/>
+
+                <TextBlock Text="📄 ポリシーとサポート"
+                       FontSize="13"
+                       FontWeight="Bold"
+                       Margin="0,0,0,10"
+                       Foreground="{StaticResource TwitchPurpleBrush}"/>
+
+            <Grid Margin="0,0,0,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0" Grid.Column="0"
+                        Content="プライバシーポリシー"
+                        Command="{Binding OpenPrivacyPolicyCommand}"
+                    Height="38"
+                        Margin="0,0,8,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="0" Grid.Column="1"
+                        Content="利用条件"
+                        Command="{Binding OpenTermsOfUseCommand}"
+                    Height="38"
+                        Margin="0,0,0,8"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+                <Button Grid.Row="1" Grid.Column="0"
+                        Content="サポート窓口"
+                        Command="{Binding OpenSupportCommand}"
+                    Height="38"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+            </Grid>
+
+                <TextBlock Text="YouTube 機能を利用する前に、YouTube タブから追加のポリシーと権限説明も確認してください。"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       FontSize="11"/>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

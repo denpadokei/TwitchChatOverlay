@@ -14,6 +14,15 @@ namespace TwitchChatOverlay.ViewModels
                 nameof(ShowYouTubeChat),
                 nameof(ShowYouTubeSuperChat),
                 nameof(ShowYouTubeMembership),
+                nameof(YouTubeLegalConsentAccepted),
+                nameof(OpenPrivacyPolicyCommand),
+                nameof(OpenTermsOfUseCommand),
+                nameof(OpenYouTubeTermsCommand),
+                nameof(OpenGooglePrivacyPolicyCommand),
+                nameof(OpenGooglePermissionsCommand),
+                nameof(OpenSupportCommand),
+                nameof(ClearYouTubeAuthorizationCommand),
+                nameof(RevokeYouTubeAuthorizationCommand),
                 nameof(ObsWebSocketEnabled),
                 nameof(ObsWebSocketHost),
                 nameof(ObsWebSocketPort),
@@ -29,6 +38,28 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand ConnectYouTubeCommand => this.MainWindowViewModel.ConnectYouTubeCommand;
 
         public ICommand DisconnectYouTubeCommand => this.MainWindowViewModel.DisconnectYouTubeCommand;
+
+        public bool YouTubeLegalConsentAccepted
+        {
+            get => this.MainWindowViewModel.YouTubeLegalConsentAccepted;
+            set => this.MainWindowViewModel.YouTubeLegalConsentAccepted = value;
+        }
+
+        public ICommand OpenPrivacyPolicyCommand => this.MainWindowViewModel.OpenPrivacyPolicyCommand;
+
+        public ICommand OpenTermsOfUseCommand => this.MainWindowViewModel.OpenTermsOfUseCommand;
+
+        public ICommand OpenYouTubeTermsCommand => this.MainWindowViewModel.OpenYouTubeTermsCommand;
+
+        public ICommand OpenGooglePrivacyPolicyCommand => this.MainWindowViewModel.OpenGooglePrivacyPolicyCommand;
+
+        public ICommand OpenGooglePermissionsCommand => this.MainWindowViewModel.OpenGooglePermissionsCommand;
+
+        public ICommand OpenSupportCommand => this.MainWindowViewModel.OpenSupportCommand;
+
+        public ICommand ClearYouTubeAuthorizationCommand => this.MainWindowViewModel.ClearYouTubeAuthorizationCommand;
+
+        public ICommand RevokeYouTubeAuthorizationCommand => this.MainWindowViewModel.RevokeYouTubeAuthorizationCommand;
 
         public bool ShowYouTubeChat
         {

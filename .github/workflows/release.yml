@@ -46,6 +46,19 @@ jobs:
           -p:YouTubeClientSecret=${{ secrets.YOUTUBE_CLIENT_SECRET }}
           --output ./publish
 
+      - name: Verify bundled policy docs
+        run: |
+          $requiredFiles = @(
+            './publish/Docs/PrivacyPolicy.html',
+            './publish/Docs/TermsOfUse.html'
+          )
+
+          foreach ($file in $requiredFiles) {
+            if (-not (Test-Path $file)) {
+              throw "Required bundled document is missing from publish output: $file"
+            }
+          }
+
       - name: Zip artifacts
         run: Compress-Archive -Path ./publish/* -DestinationPath TwitchChatOverlay-${{ github.ref_name }}-win-x64.zip
 

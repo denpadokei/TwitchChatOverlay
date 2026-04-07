@@ -3,6 +3,8 @@ using Prism.Commands;
 using Prism.Mvvm;
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -15,6 +17,11 @@ namespace TwitchChatOverlay.ViewModels
 {
     public class MainWindowViewModel : BindableBase
     {
+        private const string YouTubeTermsUrl = "https://www.youtube.com/t/terms";
+        private const string GooglePrivacyPolicyUrl = "https://policies.google.com/privacy";
+        private const string GoogleSecurityPermissionsUrl = "https://security.google.com/settings/security/permissions";
+        private const string GitHubDiscussionsUrl = "https://github.com/denpadokei/TwitchChatOverlay/discussions";
+
         private double _toastBackgroundOpacity = 0.8;
 
         public ObservableCollection<string> MonitorList { get; } = [];
@@ -340,6 +347,14 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand AuthorizeYouTubeOAuthCommand { get; }
         public ICommand ConnectYouTubeCommand { get; }
         public ICommand DisconnectYouTubeCommand { get; }
+        public ICommand OpenPrivacyPolicyCommand { get; }
+        public ICommand OpenTermsOfUseCommand { get; }
+        public ICommand OpenYouTubeTermsCommand { get; }
+        public ICommand OpenGooglePrivacyPolicyCommand { get; }
+        public ICommand OpenGooglePermissionsCommand { get; }
+        public ICommand OpenSupportCommand { get; }
+        public ICommand ClearYouTubeAuthorizationCommand { get; }
+        public ICommand RevokeYouTubeAuthorizationCommand { get; }
 
         public int SelectedTabIndex
         {
@@ -376,6 +391,12 @@ namespace TwitchChatOverlay.ViewModels
             get;
             set => this.SetProperty(ref field, value);
         } = "未接続";
+
+        public bool YouTubeLegalConsentAccepted
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        }
 
         public bool ObsWebSocketEnabled
         {
@@ -439,9 +460,19 @@ namespace TwitchChatOverlay.ViewModels
             this.PreviewCommonCommentCommand = new DelegateCommand(this.PreviewCommonComment);
             this.PreviewTwitchCommentCommand = new DelegateCommand(this.PreviewTwitchComment);
             this.PreviewYouTubeCommentCommand = new DelegateCommand(this.PreviewYouTubeComment);
-            this.AuthorizeYouTubeOAuthCommand = new DelegateCommand(this.AuthorizeYouTubeOAuth);
-            this.ConnectYouTubeCommand = new DelegateCommand(this.ConnectYouTube);
+            this.AuthorizeYouTubeOAuthCommand = new DelegateCommand(this.AuthorizeYouTubeOAuth, this.CanAuthorizeYouTubeOAuth)
+                .ObservesProperty(() => this.YouTubeLegalConsentAccepted);
+            this.ConnectYouTubeCommand = new DelegateCommand(this.ConnectYouTube, this.CanConnectYouTube)
+                .ObservesProperty(() => this.YouTubeLegalConsentAccepted);
             this.DisconnectYouTubeCommand = new DelegateCommand(this.DisconnectYouTube);
+            this.OpenPrivacyPolicyCommand = new DelegateCommand(this.OpenPrivacyPolicy);
+            this.OpenTermsOfUseCommand = new DelegateCommand(this.OpenTermsOfUse);
+            this.OpenYouTubeTermsCommand = new DelegateCommand(this.OpenYouTubeTerms);
+            this.OpenGooglePrivacyPolicyCommand = new DelegateCommand(this.OpenGooglePrivacyPolicy);
+            this.OpenGooglePermissionsCommand = new DelegateCommand(this.OpenGooglePermissions);
+            this.OpenSupportCommand = new DelegateCommand(this.OpenSupport);
+            this.ClearYouTubeAuthorizationCommand = new DelegateCommand(this.ClearYouTubeAuthorization);
+            this.RevokeYouTubeAuthorizationCommand = new DelegateCommand(this.RevokeYouTubeAuthorization);
 
             this._toastService.Initialize(this._eventSubService, this._youTubeLiveChatService);
 
@@ -472,6 +503,16 @@ namespace TwitchChatOverlay.ViewModels
         private async Task AutoConnectYouTubeAsync()
         {
             var settings = this._settingsService.LoadSettings();
+
+            if (!settings.YouTubeLegalConsentAccepted)
+            {
+                if (!string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+                {
+                    this.YouTubeStatusMessage = "YouTube の利用条件への同意が未完了のため、自動接続を停止しています";
+                }
+
+                return;
+            }
 
             if (!settings.YouTubeAutoConnectEnabled)
             {
@@ -1190,6 +1231,7 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ShowYouTubeChat = this.ShowYouTubeChat;
                 settings.ShowYouTubeSuperChat = this.ShowYouTubeSuperChat;
                 settings.ShowYouTubeMembership = this.ShowYouTubeMembership;
+                settings.YouTubeLegalConsentAccepted = this.YouTubeLegalConsentAccepted;
                 settings.ObsWebSocketEnabled = this.ObsWebSocketEnabled;
                 settings.ObsWebSocketHost = this.ObsWebSocketHost;
                 settings.ObsWebSocketPort = this.ObsWebSocketPort;
@@ -1250,6 +1292,7 @@ namespace TwitchChatOverlay.ViewModels
                 this.ShowYouTubeChat = settings.ShowYouTubeChat;
                 this.ShowYouTubeSuperChat = settings.ShowYouTubeSuperChat;
                 this.ShowYouTubeMembership = settings.ShowYouTubeMembership;
+                this.YouTubeLegalConsentAccepted = settings.YouTubeLegalConsentAccepted;
                 this.ObsWebSocketEnabled = settings.ObsWebSocketEnabled;
                 this.ObsWebSocketHost = string.IsNullOrWhiteSpace(settings.ObsWebSocketHost) ? "127.0.0.1" : settings.ObsWebSocketHost;
                 this.ObsWebSocketPort = settings.ObsWebSocketPort > 0 ? settings.ObsWebSocketPort : 4455;
@@ -1439,6 +1482,12 @@ namespace TwitchChatOverlay.ViewModels
         {
             try
             {
+                if (!this.YouTubeLegalConsentAccepted)
+                {
+                    this.YouTubeStatusMessage = "プライバシーポリシーと利用条件を確認し、同意してから認可してください";
+                    return;
+                }
+
                 this.YouTubeStatusMessage = "YouTube OAuth 認可を開始しています...";
                 var token = await this._youTubeOAuthService.AuthorizeAsync(BuildSecrets.YouTubeClientId);
 
@@ -1458,8 +1507,24 @@ namespace TwitchChatOverlay.ViewModels
             }
         }
 
+        private bool CanAuthorizeYouTubeOAuth()
+        {
+            return this.YouTubeLegalConsentAccepted;
+        }
+
+        private bool CanConnectYouTube()
+        {
+            return this.YouTubeLegalConsentAccepted;
+        }
+
         private async void ConnectYouTube()
         {
+            if (!this.YouTubeLegalConsentAccepted)
+            {
+                this.YouTubeStatusMessage = "プライバシーポリシーと利用条件を確認し、同意してから接続してください";
+                return;
+            }
+
             var settings = this._settingsService.LoadSettings();
             if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
             {
@@ -1524,6 +1589,138 @@ namespace TwitchChatOverlay.ViewModels
             this._settingsService.SaveSettings(settings);
 
             this.YouTubeStatusMessage = "YouTube接続を切断しました";
+        }
+
+        private void OpenPrivacyPolicy()
+        {
+            this.OpenBundledDocument(Path.Combine("Docs", "PrivacyPolicy.html"), "プライバシーポリシーを開きました");
+        }
+
+        private void OpenTermsOfUse()
+        {
+            this.OpenBundledDocument(Path.Combine("Docs", "TermsOfUse.html"), "利用条件を開きました");
+        }
+
+        private void OpenYouTubeTerms()
+        {
+            this.OpenExternalUrl(YouTubeTermsUrl, "YouTube 利用規約を開きました");
+        }
+
+        private void OpenGooglePrivacyPolicy()
+        {
+            this.OpenExternalUrl(GooglePrivacyPolicyUrl, "Google Privacy Policy を開きました");
+        }
+
+        private void OpenGooglePermissions()
+        {
+            this.OpenExternalUrl(GoogleSecurityPermissionsUrl, "Google 権限管理ページを開きました");
+        }
+
+        private void OpenSupport()
+        {
+            this.OpenExternalUrl(GitHubDiscussionsUrl, "サポート窓口を開きました");
+        }
+
+        private void ClearYouTubeAuthorization()
+        {
+            var result = MessageBox.Show(
+                "この操作は、アプリに保存されている YouTube 認可情報を削除します。Google アカウント側の権限は取り消されません。続行しますか。",
+                "YouTube 認可情報を削除",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var settings = this._settingsService.LoadSettings();
+            this.ResetYouTubeAuthorization(settings);
+            this.YouTubeStatusMessage = "YouTube の保存済み認可情報を削除しました。Google 側の権限は権限管理ページから取り消してください";
+        }
+
+        private async void RevokeYouTubeAuthorization()
+        {
+            var result = MessageBox.Show(
+                "この操作は、Google 側の YouTube API 権限取り消しを試行し、成功・失敗にかかわらずアプリに保存された認可情報も削除します。続行しますか。",
+                "YouTube 権限を取り消して削除",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var settings = this._settingsService.LoadSettings();
+            var tokenToRevoke = string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken)
+                ? settings.YouTubeOAuthToken
+                : settings.YouTubeRefreshToken;
+            var revokeSucceeded = false;
+
+            if (!string.IsNullOrWhiteSpace(tokenToRevoke))
+            {
+                try
+                {
+                    await this._youTubeOAuthService.RevokeTokenAsync(tokenToRevoke);
+                    revokeSucceeded = true;
+                }
+                catch (Exception ex)
+                {
+                    LogService.Warning("YouTube OAuth 権限の取り消しに失敗しました。ローカル情報の削除は続行します", ex);
+                }
+            }
+
+            this.ResetYouTubeAuthorization(settings);
+            this.YouTubeStatusMessage = revokeSucceeded
+                ? "YouTube 権限を取り消し、保存済み認可情報を削除しました"
+                : "Google 側の権限取り消しは確認できませんでしたが、保存済み認可情報は削除しました。必要に応じて Google 権限管理ページも確認してください";
+        }
+
+        private void OpenBundledDocument(string relativePath, string successMessage)
+        {
+            try
+            {
+                var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
+                if (!File.Exists(fullPath))
+                {
+                    throw new FileNotFoundException($"文書ファイルが見つかりません: {fullPath}");
+                }
+
+                _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true });
+                this.StatusMessage = successMessage;
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("同梱文書の表示に失敗しました", ex);
+                this.StatusMessage = $"文書を開けませんでした: {ex.Message}";
+            }
+        }
+
+        private void OpenExternalUrl(string url, string successMessage)
+        {
+            try
+            {
+                _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                this.StatusMessage = successMessage;
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("外部リンクの表示に失敗しました", ex);
+                this.StatusMessage = $"リンクを開けませんでした: {ex.Message}";
+            }
+        }
+
+        private void ResetYouTubeAuthorization(AppSettings settings)
+        {
+            this.StopYouTubeTokenRefreshTimer();
+            this._youTubeLiveChatService.Disconnect();
+
+            settings.YouTubeOAuthToken = "";
+            settings.YouTubeRefreshToken = "";
+            settings.YouTubeTokenInfo = "";
+            settings.YouTubeAutoConnectEnabled = false;
+            this._settingsService.SaveSettings(settings);
+
+            this.YouTubeTokenInfo = "未認可";
         }
 
         private async void OnYouTubeConnectionLost(object sender, YouTubeConnectionLostEventArgs e)

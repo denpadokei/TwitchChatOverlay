@@ -169,11 +169,20 @@ Copy-Item build/local.props.example build/local.props
 
 `YouTube` タブを開き、**「🌐 YouTubeで認可する」** ボタンをクリックします。
 
+認可前に、同じタブから次の文書を確認してください。
+
+- 同梱のプライバシーポリシー
+- 同梱の利用条件
+- YouTube 利用規約
+- Google Privacy Policy
+
 1. ブラウザでGoogle認可画面が開きます
 2. 権限を許可するとローカルコールバックでトークンを保存します
 3. 認可が完了したら **「▶ 接続」** を押します
 
 > YouTube 接続には配信中の `liveChatId` が必要です。チャット受信自体は gRPC ストリームを使用し、配信がまだ開始されていない場合のみ `liveBroadcasts` を 30 秒間隔で確認して待機します。
+
+> YouTube OAuth は `https://www.googleapis.com/auth/youtube.readonly` のみを要求します。
 
 ### 4. Google Cloud 側の設定
 
@@ -194,6 +203,14 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
   - 未配信時はその後 30 秒間隔で配信確認し、配信検出後に gRPC ストリームへ接続
 
 現在の OBS 設定値は `%APPDATA%\TwitchChatOverlay\settings.json` に保存されます（暗号化保存）。
+
+## プライバシーと認可管理
+
+- YouTube OAuth トークンとリフレッシュトークンは `%APPDATA%\TwitchChatOverlay\settings.json` に暗号化保存されます
+- YouTube タブから、ローカル保存済みの認可情報削除と Google 側の権限取り消しを実行できます
+- Google 側で手動管理したい場合は `https://security.google.com/settings/security/permissions` からアクセス権を取り消せます
+- 配布物には同梱文書として `Docs/PrivacyPolicy.html` と `Docs/TermsOfUse.html` が含まれます
+- 質問やプライバシーに関する連絡先は GitHub Discussions です: `https://github.com/denpadokei/TwitchChatOverlay/discussions`
 
 | キー | 説明 | 既定値 |
 |------|------|--------|

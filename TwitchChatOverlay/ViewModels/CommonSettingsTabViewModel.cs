@@ -32,7 +32,10 @@ namespace TwitchChatOverlay.ViewModels
                 nameof(NotificationSoundFilePath),
                 nameof(NotificationSoundVolumePercent),
                 nameof(AudioOutputDevices),
-                nameof(NotificationSoundOutputDeviceId))
+                nameof(NotificationSoundOutputDeviceId),
+                nameof(OpenPrivacyPolicyCommand),
+                nameof(OpenTermsOfUseCommand),
+                nameof(OpenSupportCommand))
         {
         }
 
@@ -155,5 +158,11 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand PreviewNotificationSoundCommand => this.MainWindowViewModel.PreviewNotificationSoundCommand;
 
         public ICommand PreviewCommonCommentCommand => this.MainWindowViewModel.PreviewCommonCommentCommand;
+
+        public ICommand OpenPrivacyPolicyCommand => this.MainWindowViewModel.OpenPrivacyPolicyCommand;
+
+        public ICommand OpenTermsOfUseCommand => this.MainWindowViewModel.OpenTermsOfUseCommand;
+
+        public ICommand OpenSupportCommand => this.MainWindowViewModel.OpenSupportCommand;
     }
 }
