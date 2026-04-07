@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TwitchChatOverlay Privacy Policy</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f7f4ec;
+            --panel: #fffdf8;
+            --text: #1f2933;
+            --muted: #586574;
+            --accent: #cf3f28;
+            --border: #dfd4c4;
+            --link: #005ea8;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Yu Gothic UI", "Meiryo UI", sans-serif;
+            background: linear-gradient(180deg, #efe7d8 0%, var(--bg) 100%);
+            color: var(--text);
+        }
+
+        main {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 32px 20px 56px;
+        }
+
+        nav {
+            margin-bottom: 16px;
+        }
+
+        section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px;
+            margin-top: 16px;
+            box-shadow: 0 10px 24px rgba(60, 47, 33, 0.08);
+        }
+
+        h1, h2 {
+            margin-top: 0;
+        }
+
+        h1 {
+            font-size: 2rem;
+        }
+
+        h2 {
+            font-size: 1.15rem;
+            color: var(--accent);
+        }
+
+        p, li {
+            line-height: 1.7;
+        }
+
+        a {
+            color: var(--link);
+        }
+
+        .lead {
+            color: var(--muted);
+            max-width: 70ch;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <nav><a href="index.html">Home</a> / Privacy Policy</nav>
+        <h1>TwitchChatOverlay Privacy Policy</h1>
+        <p class="lead">このプライバシーポリシーは、TwitchChatOverlay が Twitch および YouTube API Services を利用する際に、どの情報へアクセスし、どのように保存、利用、削除するかを説明するものです。YouTube 機能を利用する前に必ず確認してください。</p>
+
+        <section>
+            <h2>1. アプリの概要</h2>
+            <p>TwitchChatOverlay は、Twitch と YouTube のライブ配信イベントやライブチャットを Windows デスクトップ上の通知として表示するためのデスクトップアプリです。YouTube 機能は YouTube API Services を利用しています。</p>
+        </section>
+
+        <section>
+            <h2>2. 取得または保存する情報</h2>
+            <p>このアプリは、YouTube 機能で次の情報を扱います。</p>
+            <ul>
+                <li>YouTube OAuth アクセストークン</li>
+                <li>YouTube OAuth リフレッシュトークン</li>
+                <li>トークン取得日時を含む認可状態表示文字列</li>
+                <li>YouTube ライブチャットから受信した表示名、メッセージ本文、Super Chat 情報、メンバーシップ情報</li>
+            </ul>
+            <p>ライブチャットの表示データは通知表示のためにメモリ上で処理されます。トークン以外の YouTube ユーザーデータやメッセージ履歴を永続保存する機能は想定していません。</p>
+        </section>
+
+        <section>
+            <h2>3. 利用目的</h2>
+            <ul>
+                <li>YouTube ライブチャット、Super Chat、メンバーシップ通知を表示するため</li>
+                <li>配信開始検出とライブチャット接続を維持するため</li>
+                <li>ユーザーが再認可せずにアプリを再利用できるようにするため</li>
+            </ul>
+            <p>このアプリは、取得した YouTube データを広告配信、販売、第三者への再提供、プロフィール分析、派生指標の販売のためには使用しません。</p>
+        </section>
+
+        <section>
+            <h2>4. 保存場所と保護方法</h2>
+            <p>YouTube OAuth トークンおよびアプリ設定は、Windows のユーザー単位保護機能を利用して暗号化したうえで、ローカル環境の設定ファイルに保存されます。保存先は通常、ユーザーの Application Data 配下の TwitchChatOverlay 設定ファイルです。</p>
+            <p>このアプリは、YouTube OAuth で読み取り専用スコープのみを要求します。</p>
+        </section>
+
+        <section>
+            <h2>5. 第三者共有</h2>
+            <p>このアプリが取得した YouTube OAuth トークンや設定情報を、アプリの開発者が外部サーバーへ送信したり、第三者へ販売したりすることは意図していません。YouTube API Services への通信、およびユーザーが明示的に開いた Google または YouTube のページへのアクセスは、それぞれ Google または YouTube のサービスとして処理されます。</p>
+        </section>
+
+        <section>
+            <h2>6. 同意の取り消しと保存データの削除</h2>
+            <p>ユーザーは次の方法で保存済みデータや権限を管理できます。</p>
+            <ul>
+                <li>アプリ内の YouTube タブからローカル保存済み YouTube 認可情報を削除する</li>
+                <li>アプリ内の YouTube タブから Google 側の権限取り消しを試行する</li>
+                <li>Google の権限管理ページからこのアプリへのアクセスを手動で取り消す</li>
+            </ul>
+            <p>Google 側で権限を取り消した後も、ローカル保存済みデータを削除したい場合はアプリ内の削除操作も実行してください。ローカル削除は YouTube 側に保存されているデータを削除するものではありません。</p>
+            <p><a href="https://security.google.com/settings/security/permissions">Google セキュリティ設定の権限管理ページ</a></p>
+        </section>
+
+        <section>
+            <h2>7. 関連する外部ポリシー</h2>
+            <ul>
+                <li><a href="https://www.youtube.com/t/terms">YouTube 利用規約</a></li>
+                <li><a href="https://developers.google.com/youtube/terms/api-services-terms-of-service">YouTube API Services Terms of Service</a></li>
+                <li><a href="https://developers.google.com/youtube/terms/developer-policies">YouTube Developer Policies</a></li>
+                <li><a href="https://policies.google.com/privacy">Google Privacy Policy</a></li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>8. 問い合わせ先</h2>
+            <p>このアプリのプライバシー慣行や保存データの取り扱いについての問い合わせは、GitHub Discussions を通じて受け付けます。</p>
+            <p><a href="https://github.com/denpadokei/TwitchChatOverlay/discussions">TwitchChatOverlay Discussions</a></p>
+        </section>
+    </main>
+</body>
+</html>
