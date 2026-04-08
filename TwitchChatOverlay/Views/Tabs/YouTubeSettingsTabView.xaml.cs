@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using TwitchChatOverlay.Infrastructure;
 
 namespace TwitchChatOverlay.Views.Tabs
 {
@@ -13,6 +14,8 @@ namespace TwitchChatOverlay.Views.Tabs
         {
             if (this.DataContext is ViewModels.YouTubeSettingsTabViewModel vm)
             {
+                if (vm is IInitialized initialized)
+                    initialized.Initialize();
                 this.ObsPasswordBox.Password = vm.ObsWebSocketPassword;
             }
         }

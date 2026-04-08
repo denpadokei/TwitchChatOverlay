@@ -93,16 +93,11 @@ namespace TwitchChatOverlay.Services
             try
             {
                 var target = settings ?? new AppSettings();
-                var json = JsonSerializer.Serialize(target);
-                var plaintext = Encoding.UTF8.GetBytes(json);
-                var protectedBytes = ProtectedData.Protect(plaintext, null, DataProtectionScope.CurrentUser);
-                var payload = new byte[_settingsFormatHeader.Length + protectedBytes.Length];
-                Buffer.BlockCopy(_settingsFormatHeader, 0, payload, 0, _settingsFormatHeader.Length);
-                Buffer.BlockCopy(protectedBytes, 0, payload, _settingsFormatHeader.Length, protectedBytes.Length);
-                File.WriteAllBytes(this._settingsPath, payload);
-
+                // 暗号化はロック外で実行（時間がかかる可能性があるため）
+                var payload = ComputeEncryptedPayload(target);
                 lock (this._sync)
                 {
+                    File.WriteAllBytes(this._settingsPath, payload);
                     this._cachedSettings = CloneSettings(target);
                 }
             }
@@ -126,43 +121,56 @@ namespace TwitchChatOverlay.Services
                     {
                         return CloneSettings(this._cachedSettings);
                     }
-                }
 
-                if (!File.Exists(this._settingsPath))
-                {
-                    var defaults = new AppSettings();
-                    lock (this._sync)
+                    if (!File.Exists(this._settingsPath))
                     {
+                        var defaults = new AppSettings();
                         this._cachedSettings = CloneSettings(defaults);
+                        return CloneSettings(defaults);
                     }
-                    return CloneSettings(defaults);
-                }
 
-                var encryptedData = File.ReadAllBytes(this._settingsPath);
+                    var encryptedData = File.ReadAllBytes(this._settingsPath);
 
-                AppSettings loaded;
-                if (HasCurrentHeader(encryptedData))
-                {
-                    loaded = LoadCurrentFormat(encryptedData);
-                }
-                else
-                {
-                    loaded = LoadLegacyFormat(encryptedData);
-                    this.SaveSettings(loaded);
-                }
+                    AppSettings loaded;
+                    if (HasCurrentHeader(encryptedData))
+                    {
+                        loaded = LoadCurrentFormat(encryptedData);
+                    }
+                    else
+                    {
+                        loaded = LoadLegacyFormat(encryptedData);
+                        // レガシー形式から移行: ロック内で直接書き込み（SaveSettings の再入を回避）
+                        try
+                        {
+                            var migratedPayload = ComputeEncryptedPayload(loaded);
+                            File.WriteAllBytes(this._settingsPath, migratedPayload);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogService.Warning("レガシー設定の移行保存に失敗しました", ex);
+                        }
+                    }
 
-                lock (this._sync)
-                {
                     this._cachedSettings = CloneSettings(loaded);
+                    return CloneSettings(loaded);
                 }
-
-                return CloneSettings(loaded);
             }
             catch (Exception ex)
             {
                 LogService.Error("設定の読み込みに失敗しました", ex);
                 throw new Exception($"設定の読み込みに失敗しました: {ex.Message}", ex);
             }
+        }
+
+        private byte[] ComputeEncryptedPayload(AppSettings target)
+        {
+            var json = JsonSerializer.Serialize(target);
+            var plaintext = Encoding.UTF8.GetBytes(json);
+            var protectedBytes = ProtectedData.Protect(plaintext, null, DataProtectionScope.CurrentUser);
+            var payload = new byte[_settingsFormatHeader.Length + protectedBytes.Length];
+            Buffer.BlockCopy(_settingsFormatHeader, 0, payload, 0, _settingsFormatHeader.Length);
+            Buffer.BlockCopy(protectedBytes, 0, payload, _settingsFormatHeader.Length, protectedBytes.Length);
+            return payload;
         }
 
         private static bool HasCurrentHeader(byte[] data)

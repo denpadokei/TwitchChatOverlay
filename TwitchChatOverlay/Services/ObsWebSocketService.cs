@@ -113,9 +113,15 @@ namespace TwitchChatOverlay.Services
         {
             try
             {
-                while (!cancellationToken.IsCancellationRequested && this._webSocket?.State == WebSocketState.Open)
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    var msg = await ReceiveJsonAsync(this._webSocket, cancellationToken);
+                    var socket = this._webSocket;
+                    if (socket == null || socket.State != WebSocketState.Open)
+                    {
+                        break;
+                    }
+
+                    var msg = await ReceiveJsonAsync(socket, cancellationToken);
                     var op = msg["op"]?.Value<int>() ?? -1;
                     if (op != 5)
                     {
