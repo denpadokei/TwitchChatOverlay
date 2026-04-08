@@ -30,6 +30,28 @@ namespace TwitchChatOverlay.Services
         public string TokenType { get; set; }
     }
 
+    public enum YouTubeOAuthFailureReason
+    {
+        UserDenied,
+        TimedOut,
+        InvalidCallback,
+        AuthorizationFailed
+    }
+
+    public class YouTubeOAuthException : Exception
+    {
+        public YouTubeOAuthFailureReason Reason { get; }
+
+        public bool IsUserDenied => this.Reason == YouTubeOAuthFailureReason.UserDenied;
+        public bool IsTimedOut => this.Reason == YouTubeOAuthFailureReason.TimedOut;
+
+        public YouTubeOAuthException(YouTubeOAuthFailureReason reason, string message)
+            : base(message)
+        {
+            this.Reason = reason;
+        }
+    }
+
     public class YouTubeOAuthService
     {
         private const string AuthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -91,7 +113,7 @@ namespace TwitchChatOverlay.Services
             if (completed != contextTask)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                throw new TimeoutException("YouTube OAuth のコールバック待機がタイムアウトしました。");
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.TimedOut, "YouTube OAuth のコールバック待機がタイムアウトしました。");
             }
 
             var context = await contextTask;
@@ -103,17 +125,22 @@ namespace TwitchChatOverlay.Services
 
             if (!string.IsNullOrEmpty(error))
             {
-                throw new Exception($"YouTube OAuth エラー: {error}");
+                if (string.Equals(error, "access_denied", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new YouTubeOAuthException(YouTubeOAuthFailureReason.UserDenied, "YouTube OAuth 認可がキャンセルされました。");
+                }
+
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.AuthorizationFailed, $"YouTube OAuth エラー: {error}");
             }
 
             if (string.IsNullOrEmpty(code))
             {
-                throw new Exception("YouTube OAuth コールバックに code が含まれていません。");
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.InvalidCallback, "YouTube OAuth コールバックに code が含まれていません。");
             }
 
             if (!string.Equals(state, returnedState, StringComparison.Ordinal))
             {
-                throw new Exception("YouTube OAuth の state が一致しません。");
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.InvalidCallback, "YouTube OAuth の state が一致しません。");
             }
 
             var token = await this.ExchangeCodeAsync(clientId, code, codeVerifier, redirectUri, cancellationToken);

@@ -35,12 +35,22 @@ namespace TwitchChatOverlay.Services
         public string Message { get; init; }
     }
 
+    public class YouTubeBroadcastEndedEventArgs : EventArgs
+    {
+        public string Message { get; init; }
+    }
+
     public class YouTubeLiveChatService
     {
         private static readonly HttpClient Http = new();
+        private static readonly TimeSpan Http2KeepAlivePingDelay = TimeSpan.FromMinutes(1);
+        private static readonly TimeSpan Http2KeepAlivePingTimeout = TimeSpan.FromSeconds(20);
         private static readonly SocketsHttpHandler GrpcHttpHandler = new()
         {
-            EnableMultipleHttp2Connections = true
+            EnableMultipleHttp2Connections = true,
+            KeepAlivePingDelay = Http2KeepAlivePingDelay,
+            KeepAlivePingTimeout = Http2KeepAlivePingTimeout,
+            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests
         };
         private static readonly GrpcChannel GrpcChannel = GrpcChannel.ForAddress(
             "https://youtube.googleapis.com",
@@ -54,6 +64,7 @@ namespace TwitchChatOverlay.Services
         private const int GrpcProfileImageSize = 88;
         private const int StreamMaxResults = 500;
         private const int MessageCacheSize = 5000;
+        private static readonly TimeSpan GrpcStreamDeadline = TimeSpan.FromHours(1);
 
         private readonly HashSet<string> _seenMessageIds = [];
         private readonly Queue<string> _seenMessageOrder = new();
@@ -67,6 +78,7 @@ namespace TwitchChatOverlay.Services
         public event EventHandler<YouTubeConnectionLostEventArgs> ConnectionLost;
         public event EventHandler BroadcastDetected;
         public event EventHandler<YouTubeWaitingForBroadcastEventArgs> WaitingForBroadcastStarted;
+        public event EventHandler<YouTubeBroadcastEndedEventArgs> BroadcastEnded;
         public bool IsConnected { get; private set; }
         public bool IsWaitingForBroadcast { get; private set; }
 
@@ -142,6 +154,21 @@ namespace TwitchChatOverlay.Services
             }
         }
 
+        private void CompleteBroadcast(string message)
+        {
+            this.IsConnected = false;
+            this.IsWaitingForBroadcast = false;
+            this._liveChatId = null;
+            this._resumePageToken = null;
+            this._broadcastPollingPending = false;
+
+            LogService.Info(message);
+            BroadcastEnded?.Invoke(this, new YouTubeBroadcastEndedEventArgs
+            {
+                Message = message
+            });
+        }
+
         public void Disconnect()
         {
             this._cts?.Cancel();
@@ -182,6 +209,12 @@ namespace TwitchChatOverlay.Services
                                     Message = $"YouTube API エラー ({apiEx.StatusCode}): {apiEx.Message}"
                                 });
                             }
+                            return;
+                        }
+
+                        if (IsBroadcastEndedException(apiEx))
+                        {
+                            this.CompleteBroadcast("YouTube 配信終了を検出したため、配信待機を停止しました。");
                             return;
                         }
 
@@ -279,6 +312,7 @@ namespace TwitchChatOverlay.Services
                         using var call = GrpcClient.StreamList(
                             this.CreateStreamRequest(),
                             headers: this.CreateGrpcHeaders(),
+                            deadline: DateTime.UtcNow.Add(GrpcStreamDeadline),
                             cancellationToken: cancellationToken);
 
                         LogService.Info($"YouTube Live Chat gRPC ストリーム開始: liveChatId={this._liveChatId}");
@@ -324,15 +358,21 @@ namespace TwitchChatOverlay.Services
                         }
 
                         var closedDelay = CalculateBackoffDelay(++failureCount, null);
-                        LogService.Warning($"YouTube Live Chat gRPC ストリームが終了しました。{closedDelay.TotalSeconds:F1}秒後に再接続します");
+                        LogService.Debug($"YouTube Live Chat gRPC ストリームが終了しました。{closedDelay.TotalSeconds:F1}秒後に再接続します");
                         await Task.Delay(closedDelay, cancellationToken);
                     }
                     catch (RpcException rpcEx) when (rpcEx.StatusCode != StatusCode.Cancelled)
                     {
                         var apiEx = ConvertToYouTubeApiException(rpcEx);
+                        if (IsBroadcastEndedException(apiEx))
+                        {
+                            this.CompleteBroadcast("YouTube 配信終了を検出したため、配信待機を停止しました。");
+                            return;
+                        }
+
                         if (ShouldResumeBroadcastWait(apiEx))
                         {
-                            this.EnterWaitingForBroadcast(startPollingImmediately: true, "YouTube 配信が終了または未検出になったため、30秒間隔の配信待機に戻ります。");
+                            this.EnterWaitingForBroadcast(startPollingImmediately: true, "YouTube 配信が未検出になったため、30秒間隔の配信待機に戻ります。");
                             return;
                         }
 
@@ -393,10 +433,14 @@ namespace TwitchChatOverlay.Services
 
         private Metadata CreateGrpcHeaders()
         {
-            return new Metadata
+            var headers = new Metadata();
+            if (!string.IsNullOrWhiteSpace(this._accessToken))
             {
-                { "authorization", $"Bearer {this._accessToken}" }
-            };
+                headers.Add("authorization", $"Bearer {this._accessToken}");
+            }
+
+            LogService.Debug($"YouTube Live Chat gRPC headers: authorization={(headers.Count > 0 ? "present" : "absent")}");
+            return headers;
         }
 
         private void AddSeenMessageId(string messageId)
@@ -457,9 +501,14 @@ namespace TwitchChatOverlay.Services
             return exception.StatusCode is 401 or 403;
         }
 
+        private static bool IsBroadcastEndedException(YouTubeApiException exception)
+        {
+            return exception.StatusCode == 410;
+        }
+
         private static bool ShouldResumeBroadcastWait(YouTubeApiException exception)
         {
-            return exception.StatusCode is 404 or 410 or 412;
+            return exception.StatusCode is 404 or 412;
         }
 
         private static YouTubeApiException ConvertToYouTubeApiException(RpcException exception)

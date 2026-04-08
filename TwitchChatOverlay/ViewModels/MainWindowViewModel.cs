@@ -481,6 +481,7 @@ namespace TwitchChatOverlay.ViewModels
             this._youTubeLiveChatService.ConnectionLost += this.OnYouTubeConnectionLost;
             this._youTubeLiveChatService.BroadcastDetected += this.OnYouTubeBroadcastDetected;
             this._youTubeLiveChatService.WaitingForBroadcastStarted += this.OnYouTubeWaitingForBroadcastStarted;
+            this._youTubeLiveChatService.BroadcastEnded += this.OnYouTubeBroadcastEnded;
             this._obsWebSocketService.StreamingStateChanged += this.OnObsStreamingStateChanged;
 
             // モニター一覧を構築
@@ -1500,6 +1501,16 @@ namespace TwitchChatOverlay.ViewModels
                 this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
                 this.YouTubeStatusMessage = "✅ YouTube OAuth 認可が完了しました";
             }
+            catch (YouTubeOAuthException ex) when (ex.IsUserDenied)
+            {
+                LogService.Info("YouTube OAuth認可はユーザーによりキャンセルされました");
+                this.YouTubeStatusMessage = ex.Message;
+            }
+            catch (YouTubeOAuthException ex) when (ex.IsTimedOut)
+            {
+                LogService.Warning("YouTube OAuth認可はタイムアウトしました");
+                this.YouTubeStatusMessage = ex.Message;
+            }
             catch (Exception ex)
             {
                 LogService.Error("YouTube OAuth認可エラー", ex);
@@ -1833,6 +1844,15 @@ namespace TwitchChatOverlay.ViewModels
             {
                 this.UpdateYouTubeTokenRefreshTimerState();
                 this.YouTubeStatusMessage = BuildYouTubeWaitingMessage(useObsForDetection);
+            }));
+        }
+
+        private void OnYouTubeBroadcastEnded(object sender, YouTubeBroadcastEndedEventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.UpdateYouTubeTokenRefreshTimerState();
+                this.YouTubeStatusMessage = $"ℹ️ {e.Message} 再開するには再接続してください";
             }));
         }
 
