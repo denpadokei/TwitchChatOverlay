@@ -41,7 +41,7 @@ body:
     id: actual
     attributes:
       label: 実際の動作
-      placeholder: 例）「接続エラー: ...」というメッセージが表示された
+      placeholder: "例）「接続エラー: ...」というメッセージが表示された"
     validations:
       required: true
 
