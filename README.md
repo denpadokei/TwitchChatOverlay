@@ -184,6 +184,13 @@ Copy-Item build/local.props.example build/local.props
 
 > YouTube OAuth は `https://www.googleapis.com/auth/youtube.readonly` のみを要求します。
 
+### YouTube 接続トラブル: クォーター枯渇
+
+YouTube への接続が急にできなくなった場合、アプリ設定や認可ミスではなく Google 側のクォーター枯渇が原因のことがあります。
+
+- 参考: https://issuetracker.google.com/issues/476293143
+- 要するに Google 側の都合なので、くそくらえです。
+
 ### 4. Google Cloud 側の設定
 
 - OAuth クライアントタイプはデスクトップアプリ推奨
