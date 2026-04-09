@@ -89,21 +89,42 @@ namespace TwitchChatOverlay.Services
 
         public async Task ConnectAsync(string accessToken, bool checkImmediately, bool waitForObsSignalBeforePolling)
         {
+            await this.ConnectCoreAsync(accessToken, checkImmediately, waitForObsSignalBeforePolling, preserveState: false);
+        }
+
+        public async Task ReconnectAsync(string accessToken, bool checkImmediately, bool waitForObsSignalBeforePolling)
+        {
+            var preserveState = !this.IsWaitingForBroadcast && !string.IsNullOrWhiteSpace(this._liveChatId);
+            await this.ConnectCoreAsync(accessToken, checkImmediately, waitForObsSignalBeforePolling, preserveState);
+        }
+
+        private async Task ConnectCoreAsync(string accessToken, bool checkImmediately, bool waitForObsSignalBeforePolling, bool preserveState)
+        {
             if (string.IsNullOrWhiteSpace(accessToken))
             {
                 throw new InvalidOperationException("YouTube OAuth token がありません。");
             }
 
-            this.Disconnect();
+            this.DisconnectCurrentSession(clearState: !preserveState);
             this._accessToken = accessToken;
-            this._liveChatId = null;
-            this._resumePageToken = null;
-            this._seenMessageIds.Clear();
-            this._seenMessageOrder.Clear();
             this._cts = new CancellationTokenSource();
             this._broadcastPollingPending = false;
 
-            this._liveChatId = checkImmediately ? await this.ResolveLiveChatIdAsync(this._cts.Token) : null;
+            LogService.Debug(
+                $"YouTube接続を初期化します: mode={(preserveState ? "state preserved" : "full reset")}, " +
+                $"liveChatId={(string.IsNullOrWhiteSpace(this._liveChatId) ? "none" : "present")}, " +
+                $"pageToken={(string.IsNullOrWhiteSpace(this._resumePageToken) ? "none" : "present")}, " +
+                $"seenIds={this._seenMessageIds.Count}");
+
+            if (!preserveState || string.IsNullOrWhiteSpace(this._liveChatId))
+            {
+                this._liveChatId = checkImmediately ? await this.ResolveLiveChatIdAsync(this._cts.Token) : null;
+            }
+            else
+            {
+                LogService.Debug("YouTube再接続では liveChatId と pageToken を維持します");
+            }
+
             if (string.IsNullOrWhiteSpace(this._liveChatId))
             {
                 if (waitForObsSignalBeforePolling)
@@ -119,7 +140,7 @@ namespace TwitchChatOverlay.Services
 
             this.IsConnected = true;
             _ = Task.Run(() => this.StreamLoopAsync(this._cts.Token));
-            LogService.Info($"YouTube Live Chat 接続開始: liveChatId={this._liveChatId}");
+            LogService.Info($"YouTube Live Chat 接続開始: liveChatId={this._liveChatId}, mode={(preserveState ? "state preserved" : "full reset")}");
         }
 
         public void StartBroadcastPolling()
@@ -171,15 +192,28 @@ namespace TwitchChatOverlay.Services
 
         public void Disconnect()
         {
+            this.DisconnectCurrentSession(clearState: true);
+        }
+
+        private void DisconnectCurrentSession(bool clearState)
+        {
             this._cts?.Cancel();
             this._cts?.Dispose();
             this._cts = null;
             this._accessToken = null;
-            this._liveChatId = null;
-            this._resumePageToken = null;
             this.IsConnected = false;
             this.IsWaitingForBroadcast = false;
             this._broadcastPollingPending = false;
+
+            if (!clearState)
+            {
+                return;
+            }
+
+            this._liveChatId = null;
+            this._resumePageToken = null;
+            this._seenMessageIds.Clear();
+            this._seenMessageOrder.Clear();
         }
 
         private async Task WaitForBroadcastLoopAsync(CancellationToken cancellationToken)
@@ -257,7 +291,10 @@ namespace TwitchChatOverlay.Services
             }
             finally
             {
-                this.IsWaitingForBroadcast = false;
+                if (this.IsCurrentSession(cancellationToken) || this._cts == null)
+                {
+                    this.IsWaitingForBroadcast = false;
+                }
             }
         }
 
@@ -385,6 +422,18 @@ namespace TwitchChatOverlay.Services
                         LogService.Warning($"YouTube Live Chat gRPC 受信失敗: {apiEx.StatusCode}。{delay.TotalSeconds:F1}秒後に再接続します");
                         await Task.Delay(delay, cancellationToken);
                     }
+                    catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Cancelled)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            LogService.Info("YouTube Live Chat gRPC ストリーム終了（キャンセル）");
+                            return;
+                        }
+
+                        var delay = CalculateBackoffDelay(++failureCount, null);
+                        LogService.Warning($"YouTube Live Chat gRPC ストリームがキャンセルされました。{delay.TotalSeconds:F1}秒後に再接続します");
+                        await Task.Delay(delay, cancellationToken);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -408,8 +457,16 @@ namespace TwitchChatOverlay.Services
             }
             finally
             {
-                this.IsConnected = false;
+                if (this.IsCurrentSession(cancellationToken) || this._cts == null)
+                {
+                    this.IsConnected = false;
+                }
             }
+        }
+
+        private bool IsCurrentSession(CancellationToken cancellationToken)
+        {
+            return this._cts != null && this._cts.Token == cancellationToken;
         }
 
         private LiveChatMessageListRequest CreateStreamRequest()

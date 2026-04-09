@@ -739,7 +739,7 @@ namespace TwitchChatOverlay.ViewModels
                 {
                     var waitForObsSignal = this._lastYouTubeWaitForObsSignal;
                     LogService.Debug("[YouTube SilentRefresh] 接続中のため新トークンで再接続");
-                    await this._youTubeLiveChatService.ConnectAsync(
+                    await this._youTubeLiveChatService.ReconnectAsync(
                         refreshed.AccessToken,
                         checkImmediately: !waitForObsSignal,
                         waitForObsSignalBeforePolling: waitForObsSignal);
@@ -1766,7 +1766,7 @@ namespace TwitchChatOverlay.ViewModels
                 var (UseObsForDetection, ObsConnected) = await this.TryPrepareObsAsync(settings);
                 var waitForObsSignal = UseObsForDetection;
                 this._lastYouTubeWaitForObsSignal = waitForObsSignal;
-                await this._youTubeLiveChatService.ConnectAsync(
+                await this._youTubeLiveChatService.ReconnectAsync(
                     settings.YouTubeOAuthToken,
                     checkImmediately: !waitForObsSignal,
                     waitForObsSignalBeforePolling: waitForObsSignal);
