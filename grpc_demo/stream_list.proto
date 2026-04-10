@@ -2,9 +2,6 @@ syntax = "proto2";
 
 package youtube.api.v3;
 
-option csharp_namespace = "TwitchChatOverlay.YouTube.LiveChat.V3";
-
-// Allows a client to read YouTube live chat through a server-streamed RPC.
 service V3DataLiveChatMessageService {
   // Allows a user to load live chat through a server-streamed RPC.
   rpc StreamList(LiveChatMessageListRequest)
@@ -56,7 +53,9 @@ message LiveChatMessageListResponse {
 
   // General pagination information.
   optional PageInfo page_info = 1004;
+
   optional string next_page_token = 100602;
+
   repeated LiveChatMessage items = 1007;
 
   // Set when there is an active poll.
@@ -85,25 +84,18 @@ message LiveChatMessage {
 message LiveChatMessageAuthorDetails {
   // The YouTube channel ID.
   optional string channel_id = 10101;
-
   // The channel's URL.
   optional string channel_url = 102;
-
   // The channel's display name.
   optional string display_name = 103;
-
   // The channels's avatar URL.
   optional string profile_image_url = 104;
-
   // Whether the author's identity has been verified by YouTube.
   optional bool is_verified = 4;
-
   // Whether the author is the owner of the live chat.
   optional bool is_chat_owner = 5;
-
   // Whether the author is a sponsor of the live chat.
   optional bool is_chat_sponsor = 6;
-
   // Whether the author is a moderator of the live chat.
   optional bool is_chat_moderator = 7;
 }
@@ -130,7 +122,6 @@ message LiveChatMessageSnippet {
       POLL_EVENT = 20;
     }
   }
-
   // The type of message, this will always be present, it determines the
   // contents of the message as well as which fields will be present.
   optional TypeWrapper.Type type = 1;
@@ -218,7 +209,6 @@ message LiveChatUserBannedMessageDetails {
       TEMPORARY = 2;
     }
   }
-
   // The details of the user that was banned.
   optional ChannelProfileDetails banned_user_details = 1;
 
@@ -233,16 +223,12 @@ message LiveChatUserBannedMessageDetails {
 message LiveChatSuperChatDetails {
   // The amount purchased by the user, in micros (1,750,000 micros = 1.75).
   optional uint64 amount_micros = 1;
-
   // The currency in which the purchase was made.
   optional string currency = 2;
-
   // A rendered string that displays the fund amount and currency to the user.
   optional string amount_display_string = 3;
-
   // The comment added by the user to this Super Chat event.
   optional string user_comment = 4;
-
   // The tier in which the amount belongs. Lower amounts belong to lower
   // tiers. The lowest tier is <code>1</code>.
   optional uint32 tier = 5;
@@ -251,17 +237,13 @@ message LiveChatSuperChatDetails {
 message LiveChatSuperStickerDetails {
   // The amount purchased by the user, in micros (1,750,000 micros = 1.75).
   optional uint64 amount_micros = 1;
-
   // The currency in which the purchase was made.
   optional string currency = 2;
-
   // A rendered string that displays the fund amount and currency to the user.
   optional string amount_display_string = 3;
-
   // The tier in which the amount belongs. Lower amounts belong to lower
   // tiers. The lowest tier is <code>1</code>.
   optional uint32 tier = 4;
-
   // Information about the Super Sticker.
   optional SuperStickerMetadata super_sticker_metadata = 5;
 }
@@ -346,7 +328,6 @@ message LiveChatPollDetails {
       optional string option_text = 1;
       optional int64 tally = 2;
     }
-
     optional string question_text = 1;
     // The options will be returned in the order that is displayed in 1P
     repeated PollOption options = 2;

@@ -596,10 +596,19 @@ namespace TwitchChatOverlay.Services
 
             var username = item.AuthorDetails?.DisplayName ?? "YouTubeUser";
             var message = snippet.DisplayMessage ?? string.Empty;
+            var superChatDetails = snippet.DisplayedContentCase == LiveChatMessageSnippet.DisplayedContentOneofCase.SuperChatDetails
+                ? snippet.SuperChatDetails
+                : null;
+            var newSponsorDetails = snippet.DisplayedContentCase == LiveChatMessageSnippet.DisplayedContentOneofCase.NewSponsorDetails
+                ? snippet.NewSponsorDetails
+                : null;
+            var memberMilestoneChatDetails = snippet.DisplayedContentCase == LiveChatMessageSnippet.DisplayedContentOneofCase.MemberMilestoneChatDetails
+                ? snippet.MemberMilestoneChatDetails
+                : null;
 
             return snippet.Type switch
             {
-                LiveChatMessageSnippet.Types.Type.TextMessageEvent => new OverlayNotification
+                LiveChatMessageSnippet.Types.TypeWrapper.Types.Type.TextMessageEvent => new OverlayNotification
                 {
                     SourcePlatform = "YouTube",
                     Type = NotificationType.Chat,
@@ -608,26 +617,26 @@ namespace TwitchChatOverlay.Services
                     Fragments = [new TextFragment { Text = message }],
                     UserColor = "#FFFFFF"
                 },
-                LiveChatMessageSnippet.Types.Type.SuperChatEvent => new OverlayNotification
+                LiveChatMessageSnippet.Types.TypeWrapper.Types.Type.SuperChatEvent => new OverlayNotification
                 {
                     SourcePlatform = "YouTube",
                     Type = NotificationType.Reward,
                     Username = username,
-                    DisplayText = string.IsNullOrWhiteSpace(snippet.SuperChatDetails?.AmountDisplayString)
+                    DisplayText = string.IsNullOrWhiteSpace(superChatDetails?.AmountDisplayString)
                         ? "Super Chat"
-                        : snippet.SuperChatDetails.AmountDisplayString,
-                    SubText = string.IsNullOrWhiteSpace(snippet.SuperChatDetails?.UserComment)
+                        : superChatDetails.AmountDisplayString,
+                    SubText = string.IsNullOrWhiteSpace(superChatDetails?.UserComment)
                         ? message
-                        : snippet.SuperChatDetails.UserComment
+                        : superChatDetails.UserComment
                 },
-                LiveChatMessageSnippet.Types.Type.NewSponsorEvent or LiveChatMessageSnippet.Types.Type.MemberMilestoneChatEvent => new OverlayNotification
+                LiveChatMessageSnippet.Types.TypeWrapper.Types.Type.NewSponsorEvent or LiveChatMessageSnippet.Types.TypeWrapper.Types.Type.MemberMilestoneChatEvent => new OverlayNotification
                 {
                     SourcePlatform = "YouTube",
                     Type = NotificationType.Subscribe,
                     Username = username,
                     DisplayText = "メンバーシップ",
                     SubText = string.IsNullOrWhiteSpace(message)
-                        ? snippet.MemberMilestoneChatDetails?.UserComment ?? snippet.NewSponsorDetails?.MemberLevelName ?? string.Empty
+                        ? memberMilestoneChatDetails?.UserComment ?? newSponsorDetails?.MemberLevelName ?? string.Empty
                         : message
                 },
                 _ => null
