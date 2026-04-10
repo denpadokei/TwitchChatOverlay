@@ -70,8 +70,11 @@ namespace TwitchChatOverlay.ViewModels
         private readonly ObsWebSocketService _obsWebSocketService;
         private Timer _tokenRefreshTimer;
         private Timer _youtubeTokenRefreshTimer;
+        private Timer _obsReconnectTimer;
         private int _isHandlingYouTubeConnectionLost;
+        private int _isObsReconnectInProgress;
         private Timer _validateTimer;
+        private bool _obsAutoReconnectEnabled;
         /// <summary>次回タイマー設定用: refresh 直後の expires_in（秒）。0 のときはデフォルト値を使用。</summary>
         private int _nextRefreshExpiresIn;
         /// <summary>前回 YouTube 接続時の waitForObsSignalBeforePolling オプション。サイレントリフレッシュ再接続に使用。</summary>
@@ -347,6 +350,8 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand AuthorizeYouTubeOAuthCommand { get; }
         public ICommand ConnectYouTubeCommand { get; }
         public ICommand DisconnectYouTubeCommand { get; }
+        public ICommand ConnectObsCommand { get; }
+        public ICommand DisconnectObsCommand { get; }
         public ICommand OpenPrivacyPolicyCommand { get; }
         public ICommand OpenTermsOfUseCommand { get; }
         public ICommand OpenYouTubeTermsCommand { get; }
@@ -401,7 +406,14 @@ namespace TwitchChatOverlay.ViewModels
         public bool ObsWebSocketEnabled
         {
             get;
-            set => this.SetProperty(ref field, value);
+            set
+            {
+                if (this.SetProperty(ref field, value))
+                {
+                    this.UpdateObsStatusMessage();
+                    this.RaiseObsCommandStateChanged();
+                }
+            }
         }
 
         public string ObsWebSocketHost
@@ -421,6 +433,12 @@ namespace TwitchChatOverlay.ViewModels
             get;
             set => this.SetProperty(ref field, value);
         } = "";
+
+        public string ObsStatusMessage
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "OBS連携は無効です";
 
         public MainWindowViewModel(
             SettingsService settingsService,
@@ -465,6 +483,10 @@ namespace TwitchChatOverlay.ViewModels
             this.ConnectYouTubeCommand = new DelegateCommand(this.ConnectYouTube, this.CanConnectYouTube)
                 .ObservesProperty(() => this.YouTubeLegalConsentAccepted);
             this.DisconnectYouTubeCommand = new DelegateCommand(this.DisconnectYouTube);
+            this.ConnectObsCommand = new DelegateCommand(this.ConnectObs, this.CanConnectObs)
+                .ObservesProperty(() => this.ObsWebSocketEnabled);
+            this.DisconnectObsCommand = new DelegateCommand(this.DisconnectObs, this.CanDisconnectObs)
+                .ObservesProperty(() => this.ObsWebSocketEnabled);
             this.OpenPrivacyPolicyCommand = new DelegateCommand(this.OpenPrivacyPolicy);
             this.OpenTermsOfUseCommand = new DelegateCommand(this.OpenTermsOfUse);
             this.OpenYouTubeTermsCommand = new DelegateCommand(this.OpenYouTubeTerms);
@@ -482,6 +504,7 @@ namespace TwitchChatOverlay.ViewModels
             this._youTubeLiveChatService.BroadcastDetected += this.OnYouTubeBroadcastDetected;
             this._youTubeLiveChatService.WaitingForBroadcastStarted += this.OnYouTubeWaitingForBroadcastStarted;
             this._youTubeLiveChatService.BroadcastEnded += this.OnYouTubeBroadcastEnded;
+            this._obsWebSocketService.ConnectionStateChanged += this.OnObsConnectionStateChanged;
             this._obsWebSocketService.StreamingStateChanged += this.OnObsStreamingStateChanged;
 
             // モニター一覧を構築
@@ -496,9 +519,23 @@ namespace TwitchChatOverlay.ViewModels
             this.ReloadAudioOutputDevices();
 
             this.LoadSettings();
+            _ = this.AutoConnectObsAsync();
             _ = this.ValidateSavedTokenAsync();
             _ = this.AutoConnectYouTubeAsync();
             _ = this.CheckForUpdateAsync();
+        }
+
+        private async Task AutoConnectObsAsync()
+        {
+            if (!this.ObsWebSocketEnabled)
+            {
+                this.StopObsReconnectTimer();
+                this.UpdateObsStatusMessage();
+                return;
+            }
+
+            this._obsAutoReconnectEnabled = true;
+            await this.TryConnectObsAsync(isAutomatic: true, statusPrefix: "起動時に OBS へ接続中...");
         }
 
         private async Task AutoConnectYouTubeAsync()
@@ -535,7 +572,7 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 this.YouTubeStatusMessage = "YouTube自動接続中...";
-                var (UseObsForDetection, ObsConnected) = await this.TryPrepareObsAsync(settings);
+                var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
                 var waitForObsSignal = UseObsForDetection;
                 this._lastYouTubeWaitForObsSignal = waitForObsSignal;
                 await this._youTubeLiveChatService.ConnectAsync(
@@ -567,7 +604,7 @@ namespace TwitchChatOverlay.ViewModels
                     this._settingsService.SaveSettings(settings);
 
                     this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
-                    var (UseObsForDetection, ObsConnected) = await this.TryPrepareObsAsync(settings);
+                    var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
                     var waitForObsSignal = UseObsForDetection;
                     this._lastYouTubeWaitForObsSignal = waitForObsSignal;
                     await this._youTubeLiveChatService.ConnectAsync(
@@ -687,6 +724,32 @@ namespace TwitchChatOverlay.ViewModels
         {
             this._youtubeTokenRefreshTimer?.Dispose();
             this._youtubeTokenRefreshTimer = null;
+        }
+
+        private void StartObsReconnectTimer()
+        {
+            if (!this._obsAutoReconnectEnabled || !this.ObsWebSocketEnabled || this._obsWebSocketService.IsConnected)
+            {
+                return;
+            }
+
+            if (this._obsReconnectTimer != null)
+            {
+                return;
+            }
+
+            var interval = TimeSpan.FromSeconds(10);
+            this._obsReconnectTimer = new Timer(
+                _ => _ = this.TryConnectObsAsync(isAutomatic: true, statusPrefix: "OBS が見つからないため再接続中..."),
+                null,
+                interval,
+                interval);
+        }
+
+        private void StopObsReconnectTimer()
+        {
+            this._obsReconnectTimer?.Dispose();
+            this._obsReconnectTimer = null;
         }
 
         private void UpdateYouTubeTokenRefreshTimerState()
@@ -1298,6 +1361,7 @@ namespace TwitchChatOverlay.ViewModels
                 this.ObsWebSocketHost = string.IsNullOrWhiteSpace(settings.ObsWebSocketHost) ? "127.0.0.1" : settings.ObsWebSocketHost;
                 this.ObsWebSocketPort = settings.ObsWebSocketPort > 0 ? settings.ObsWebSocketPort : 4455;
                 this.ObsWebSocketPassword = settings.ObsWebSocketPassword ?? "";
+                this.UpdateObsStatusMessage();
                 this.ToastDurationSeconds = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds : 5;
                 this.ToastMaxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
                 this.ToastPositionIndex = (int)settings.ToastPosition;
@@ -1528,6 +1592,16 @@ namespace TwitchChatOverlay.ViewModels
             return this.YouTubeLegalConsentAccepted;
         }
 
+        private bool CanConnectObs()
+        {
+            return this.ObsWebSocketEnabled && !this._obsWebSocketService.IsConnected;
+        }
+
+        private bool CanDisconnectObs()
+        {
+            return this._obsWebSocketService.IsConnected;
+        }
+
         private async void ConnectYouTube()
         {
             if (!this.YouTubeLegalConsentAccepted)
@@ -1547,7 +1621,7 @@ namespace TwitchChatOverlay.ViewModels
             {
                 this.YouTubeStatusMessage = "YouTube Live Chat に接続中...";
                 this._settingsService.SaveSettings(settings);
-                var (UseObsForDetection, ObsConnected) = await this.TryPrepareObsAsync(settings);
+                var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
                 var waitForObsSignal = UseObsForDetection;
                 this._lastYouTubeWaitForObsSignal = waitForObsSignal;
 
@@ -1600,6 +1674,71 @@ namespace TwitchChatOverlay.ViewModels
             this._settingsService.SaveSettings(settings);
 
             this.YouTubeStatusMessage = "YouTube接続を切断しました";
+        }
+
+        private async void ConnectObs()
+        {
+            this._obsAutoReconnectEnabled = true;
+            await this.TryConnectObsAsync(isAutomatic: false, statusPrefix: "OBS WebSocket に接続中...");
+        }
+
+        private void DisconnectObs()
+        {
+            this._obsAutoReconnectEnabled = false;
+            this.StopObsReconnectTimer();
+            this._obsWebSocketService.Disconnect();
+            this.ObsStatusMessage = "OBS接続を切断しました";
+            this.RaiseObsCommandStateChanged();
+        }
+
+        private async Task TryConnectObsAsync(bool isAutomatic, string statusPrefix)
+        {
+            if (!this.ObsWebSocketEnabled)
+            {
+                this.StopObsReconnectTimer();
+                this.UpdateObsStatusMessage();
+                return;
+            }
+
+            if (Interlocked.Exchange(ref this._isObsReconnectInProgress, 1) == 1)
+            {
+                return;
+            }
+
+            try
+            {
+                this.ObsStatusMessage = statusPrefix;
+                var result = await this._obsWebSocketService.ConnectAsync(
+                    this.ObsWebSocketHost,
+                    this.ObsWebSocketPort,
+                    this.ObsWebSocketPassword);
+
+                if (result.IsConnected)
+                {
+                    this.StopObsReconnectTimer();
+                    this.UpdateObsStatusMessage();
+                    return;
+                }
+
+                if (result.ShouldRetry)
+                {
+                    this._obsAutoReconnectEnabled = true;
+                    this.StartObsReconnectTimer();
+                    this.ObsStatusMessage = isAutomatic
+                        ? "OBS が見つからないため、10 秒ごとに再接続します。"
+                        : "OBS が見つからないため、10 秒ごとに再接続します。OBS を起動すると自動接続します。";
+                    return;
+                }
+
+                this._obsAutoReconnectEnabled = false;
+                this.StopObsReconnectTimer();
+                this.ObsStatusMessage = result.Message;
+            }
+            finally
+            {
+                _ = Interlocked.Exchange(ref this._isObsReconnectInProgress, 0);
+                this.RaiseObsCommandStateChanged();
+            }
         }
 
         private void OpenPrivacyPolicy()
@@ -1763,7 +1902,7 @@ namespace TwitchChatOverlay.ViewModels
                 }
 
                 this.YouTubeStatusMessage = "YouTube再接続中...";
-                var (UseObsForDetection, ObsConnected) = await this.TryPrepareObsAsync(settings);
+                var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
                 var waitForObsSignal = UseObsForDetection;
                 this._lastYouTubeWaitForObsSignal = waitForObsSignal;
                 await this._youTubeLiveChatService.ReconnectAsync(
@@ -1786,29 +1925,52 @@ namespace TwitchChatOverlay.ViewModels
             }
         }
 
-        private async Task<(bool UseObsForDetection, bool ObsConnected)> TryPrepareObsAsync(AppSettings settings)
+        private (bool UseObsForDetection, bool ObsConnected) GetObsPreparationState()
         {
-            if (!settings.ObsWebSocketEnabled)
+            if (!this.ObsWebSocketEnabled)
             {
                 return (false, false);
             }
 
-            var connected = this._obsWebSocketService.IsConnected || await this._obsWebSocketService.ConnectAsync(
-                settings.ObsWebSocketHost,
-                settings.ObsWebSocketPort,
-                settings.ObsWebSocketPassword);
-
-            if (!connected)
+            if (!this._obsWebSocketService.IsConnected)
             {
-                LogService.Warning("OBS連携が有効ですが接続できませんでした。即時配信確認にフォールバックします。");
+                LogService.Warning("OBS連携は有効ですが、OBS に未接続のため即時配信確認にフォールバックします。");
                 return (false, false);
             }
 
             return (true, true);
         }
 
+        private void OnObsConnectionStateChanged(object sender, EventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                if (this._obsWebSocketService.IsConnected)
+                {
+                    this.StopObsReconnectTimer();
+                    this.UpdateObsStatusMessage();
+                }
+                else if (Interlocked.CompareExchange(ref this._isObsReconnectInProgress, 0, 0) == 0 && this._obsAutoReconnectEnabled && this.ObsWebSocketEnabled)
+                {
+                    this.StartObsReconnectTimer();
+                    this.ObsStatusMessage = "OBS との接続が切れました。10 秒ごとに再接続します。";
+                }
+                else if (!this._obsAutoReconnectEnabled)
+                {
+                    this.UpdateObsStatusMessage();
+                }
+
+                this.RaiseObsCommandStateChanged();
+            }));
+        }
+
         private void OnObsStreamingStateChanged(object sender, ObsStreamingStateChangedEventArgs e)
         {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.UpdateObsStatusMessage();
+            }));
+
             if (!e.IsStreaming)
             {
                 return;
@@ -1837,8 +1999,7 @@ namespace TwitchChatOverlay.ViewModels
 
         private void OnYouTubeWaitingForBroadcastStarted(object sender, YouTubeWaitingForBroadcastEventArgs e)
         {
-            var settings = this._settingsService.LoadSettings();
-            var useObsForDetection = settings.ObsWebSocketEnabled && this._obsWebSocketService.IsConnected;
+            var useObsForDetection = this.ObsWebSocketEnabled && this._obsWebSocketService.IsConnected;
 
             _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
@@ -1859,6 +2020,33 @@ namespace TwitchChatOverlay.ViewModels
         private static string BuildYouTubeConnectedMessage(string prefix)
         {
             return $"{prefix} (gRPC ストリーム受信中)";
+        }
+
+        private void UpdateObsStatusMessage()
+        {
+            if (!this.ObsWebSocketEnabled)
+            {
+                this.StopObsReconnectTimer();
+                this._obsAutoReconnectEnabled = false;
+                this.ObsStatusMessage = "OBS連携は無効です";
+                return;
+            }
+
+            if (!this._obsWebSocketService.IsConnected)
+            {
+                this.ObsStatusMessage = "OBS未接続";
+                return;
+            }
+
+            this.ObsStatusMessage = this._obsWebSocketService.IsStreaming
+                ? "✅ OBS接続中 (配信中)"
+                : "✅ OBS接続中";
+        }
+
+        private void RaiseObsCommandStateChanged()
+        {
+            ((DelegateCommand)this.ConnectObsCommand).RaiseCanExecuteChanged();
+            ((DelegateCommand)this.DisconnectObsCommand).RaiseCanExecuteChanged();
         }
 
         private static string BuildYouTubeWaitingMessage(bool waitForObsSignal)

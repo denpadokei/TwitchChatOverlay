@@ -27,6 +27,9 @@ namespace TwitchChatOverlay.ViewModels
                 nameof(ObsWebSocketHost),
                 nameof(ObsWebSocketPort),
                 nameof(ObsWebSocketPassword),
+                nameof(ConnectObsCommand),
+                nameof(DisconnectObsCommand),
+                nameof(ObsStatusMessage),
                 nameof(YouTubeStatusMessage))
         {
         }
@@ -104,6 +107,12 @@ namespace TwitchChatOverlay.ViewModels
             get => this.MainWindowViewModel.ObsWebSocketPassword;
             set => this.MainWindowViewModel.ObsWebSocketPassword = value;
         }
+
+        public ICommand ConnectObsCommand => this.MainWindowViewModel.ConnectObsCommand;
+
+        public ICommand DisconnectObsCommand => this.MainWindowViewModel.DisconnectObsCommand;
+
+        public string ObsStatusMessage => this.MainWindowViewModel.ObsStatusMessage;
 
         public string YouTubeStatusMessage => this.MainWindowViewModel.YouTubeStatusMessage;
     }

@@ -4,7 +4,13 @@
              xmlns:prism="http://prismlibrary.com/"
              prism:ViewModelLocator.AutoWireViewModel="True"
              Background="{StaticResource BackgroundBrush}"
-             Loaded="OnLoaded">
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:actions="clr-namespace:TwitchChatOverlay.Behaviours">
+    <i:Interaction.Triggers>
+        <i:EventTrigger EventName="Loaded">
+            <actions:LoadedEventBehaviour />
+        </i:EventTrigger>
+    </i:Interaction.Triggers>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="12,12,12,12" VerticalAlignment="Top">
             <TextBlock Text="YouTube 設定"
@@ -240,18 +246,36 @@
                            Text="Password"
                            VerticalAlignment="Center"
                            Foreground="{StaticResource TextSecondaryBrush}"/>
-                <PasswordBox x:Name="ObsPasswordBox"
+                <TextBox x:Name="ObsPasswordBox"
                              Grid.Column="1"
-                             Style="{StaticResource StandardPasswordBoxStyle}"
                              IsEnabled="{Binding ObsWebSocketEnabled}"
-                             PasswordChanged="OnObsPasswordChanged"/>
+                         Text="{Binding ObsWebSocketPassword}"
+                             />
             </Grid>
 
-            <TextBlock Text="OBS未利用時は接続時に1回だけ即時確認し、その後30秒間隔で配信確認します。"
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <Button Content="▶ OBS接続"
+                    Command="{Binding ConnectObsCommand}"
+                    Width="110" Height="36"
+                    Style="{StaticResource PrimaryButtonStyle}"
+                    Margin="0,0,8,0"/>
+                <Button Content="⏹ OBS切断"
+                    Command="{Binding DisconnectObsCommand}"
+                    Width="110" Height="36"
+                    Style="{StaticResource SecondaryButtonStyle}"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding ObsStatusMessage}"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       Margin="0,8,0,0"/>
+
+                <TextBlock Text="OBS 連携を使う場合は、YouTube 接続の前にここで OBS へ接続してください。OBS 未接続時は YouTube 側で即時確認にフォールバックします。"
                        Foreground="{StaticResource TextSecondaryBrush}"
                        TextWrapping="Wrap"
                        FontSize="11"
-                       Margin="0,2,0,0"/>
+                       Margin="0,6,0,0"/>
 
             <TextBlock Text="{Binding YouTubeStatusMessage}"
                        Foreground="{StaticResource TextSecondaryBrush}"
