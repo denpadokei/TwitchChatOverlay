@@ -63,8 +63,9 @@ namespace TwitchChatOverlay.Services
         private const int BroadcastPollIntervalMs = 30_000;
         private const int GrpcProfileImageSize = 88;
         private const int StreamMaxResults = 500;
-        private const int MessageCacheSize = 5000;
         private static readonly TimeSpan GrpcStreamDeadline = TimeSpan.FromHours(1);
+        public const int DefaultMessageCacheSize = 5000;
+        public const int MinMessageCacheSize = 100;
 
         private readonly HashSet<string> _seenMessageIds = [];
         private readonly Queue<string> _seenMessageOrder = new();
@@ -73,6 +74,7 @@ namespace TwitchChatOverlay.Services
         private string _liveChatId;
         private string _resumePageToken;
         private bool _broadcastPollingPending;
+        private int _messageCacheSize = DefaultMessageCacheSize;
 
         public event EventHandler<OverlayNotification> NotificationReceived;
         public event EventHandler<YouTubeConnectionLostEventArgs> ConnectionLost;
@@ -81,6 +83,16 @@ namespace TwitchChatOverlay.Services
         public event EventHandler<YouTubeBroadcastEndedEventArgs> BroadcastEnded;
         public bool IsConnected { get; private set; }
         public bool IsWaitingForBroadcast { get; private set; }
+
+        public int MessageCacheSize
+        {
+            get => this._messageCacheSize;
+            set
+            {
+                this._messageCacheSize = Math.Max(value, MinMessageCacheSize);
+                this.TrimSeenMessageCache();
+            }
+        }
 
         public Task ConnectAsync(string accessToken)
         {
@@ -508,7 +520,12 @@ namespace TwitchChatOverlay.Services
             }
 
             this._seenMessageOrder.Enqueue(messageId);
-            while (this._seenMessageOrder.Count > MessageCacheSize)
+            this.TrimSeenMessageCache();
+        }
+
+        private void TrimSeenMessageCache()
+        {
+            while (this._seenMessageOrder.Count > this._messageCacheSize)
             {
                 var oldId = this._seenMessageOrder.Dequeue();
                 _ = this._seenMessageIds.Remove(oldId);

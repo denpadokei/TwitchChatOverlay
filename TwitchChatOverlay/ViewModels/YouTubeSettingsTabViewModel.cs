@@ -14,6 +14,7 @@ namespace TwitchChatOverlay.ViewModels
                 nameof(ShowYouTubeChat),
                 nameof(ShowYouTubeSuperChat),
                 nameof(ShowYouTubeMembership),
+                nameof(YouTubeMessageCacheSize),
                 nameof(YouTubeLegalConsentAccepted),
                 nameof(OpenPrivacyPolicyCommand),
                 nameof(OpenTermsOfUseCommand),
@@ -80,6 +81,12 @@ namespace TwitchChatOverlay.ViewModels
         {
             get => this.MainWindowViewModel.ShowYouTubeMembership;
             set => this.MainWindowViewModel.ShowYouTubeMembership = value;
+        }
+
+        public int YouTubeMessageCacheSize
+        {
+            get => this.MainWindowViewModel.YouTubeMessageCacheSize;
+            set => this.MainWindowViewModel.YouTubeMessageCacheSize = value;
         }
 
         public ICommand PreviewYouTubeCommentCommand => this.MainWindowViewModel.PreviewYouTubeCommentCommand;

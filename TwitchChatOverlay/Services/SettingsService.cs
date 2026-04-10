@@ -22,6 +22,7 @@ namespace TwitchChatOverlay.Services
         public string YouTubeTokenInfo { get; set; }
         public bool YouTubeAutoConnectEnabled { get; set; } = true;
         public bool YouTubeLegalConsentAccepted { get; set; }
+        public int YouTubeMessageCacheSize { get; set; } = 5000;
         public string BroadcasterUserId { get; set; }
         public string UserId { get; set; }
         /// <summary>トークンを取得した日時（UTC）</summary>

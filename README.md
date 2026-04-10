@@ -15,8 +15,10 @@ Twitch / YouTube のチャンネルイベントを Windows デスクトップに
   - サブスク / ギフトサブ / リサブ
   - ハイプトレイン開始・終了
 - YouTubeコメント / Super Chat / メンバーシップ通知
+- YouTube Live Chat の重複抑止メッセージキャッシュ件数を UI から調整可能
 - **Device Authorization Flow** による安全なOAuth認可（リダイレクトURL不要・クライアントシークレット不要）
 - **YouTube OAuth (PKCE)** による認可（ローカルコールバック使用）
+- YouTube 利用前のポリシー確認と同意ゲート
 - **リフレッシュトークンによる自動更新**（アクセストークン期限切れ時に自動更新・再接続）
 - 起動時に保存済みトークンを自動検証し、チャンネルへ自動接続
 - 接続中に切断された場合、自動でトークン更新・再接続
@@ -31,6 +33,7 @@ Twitch / YouTube のチャンネルイベントを Windows デスクトップに
 - プレビュー機能に対応
   - 共通タブから通知音プレビュー
   - 共通 / Twitch / YouTube タブからコメント表示プレビュー
+- YouTube 認可情報のローカル削除と Google 側権限取り消しに対応
 - 設定はフォーマット識別子付きで暗号化して保存（Windows DPAPI + 旧形式自動移行）
 
 ## 動作環境
@@ -176,11 +179,14 @@ Copy-Item build/local.props.example build/local.props
 - YouTube 利用規約
 - Google Privacy Policy
 
+YouTube の認可と接続は、ポリシー確認後に同意チェックを有効にしない限り実行できません。
+
 1. ブラウザでGoogle認可画面が開きます
 2. 権限を許可するとローカルコールバックでトークンを保存します
 3. 認可が完了したら **「▶ 接続」** を押します
 
 > YouTube 接続には配信中の `liveChatId` が必要です。チャット受信自体は gRPC ストリームを使用し、配信がまだ開始されていない場合のみ `liveBroadcasts` を 30 秒間隔で確認して待機します。
+- YouTube の gRPC proto は完全版スキーマに追従しており、Live Chat / Super Chat / メンバーシップ系イベントの詳細フィールドを将来拡張しやすい形で保持しています。
 
 > YouTube OAuth は `https://www.googleapis.com/auth/youtube.readonly` のみを要求します。
 
@@ -215,8 +221,10 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 
 - YouTube OAuth トークンとリフレッシュトークンは `%APPDATA%\TwitchChatOverlay\settings.json` に暗号化保存されます
 - YouTube タブから、ローカル保存済みの認可情報削除と Google 側の権限取り消しを実行できます
+- 同意チェックが未完了の場合、YouTube の新規認可、手動接続、自動接続は実行されません
 - Google 側で手動管理したい場合は `https://security.google.com/settings/security/permissions` からアクセス権を取り消せます
-- 配布物には同梱文書として `Docs/PrivacyPolicy.html` と `Docs/TermsOfUse.html` が含まれます
+- 配布物には同梱文書として `Docs/PrivacyPolicy.html` / `Docs/TermsOfUse.html` と、審査提出向けの `Docs/PrivacyPolicy.en.html` / `Docs/TermsOfUse.en.html` が含まれます
+- GitHub Actions の Release / CI では、publish 出力にこれらの文書が含まれていることを検証しています
 - 質問やプライバシーに関する連絡先は GitHub Discussions です: `https://github.com/denpadokei/TwitchChatOverlay/discussions`
 
 | キー | 説明 | 既定値 |
@@ -235,6 +243,7 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 | チャンネル名 | 監視するTwitchチャンネル名（例: `ninja`） |
 | 各イベントの ON/OFF | チャット / 報酬 / レイド / フォロー / サブスク / ギフトサブ / リサブ / ハイプトレイン |
 | YouTube通知 ON/OFF | YouTube Chat / Super Chat / Membership の表示切替 |
+| YouTube重複抑止キャッシュ件数 | 再接続時の旧コメント再表示を抑えるために保持する YouTube メッセージID件数。100以上で任意設定可能 |
 | 表示時間 (秒) | トーストが消えるまでの秒数（1〜30秒） |
 | 最大同時表示 | 同時に表示するトーストの最大数（1〜10件） |
 | 通知音 ON/OFF | コメント受信時の通知音を有効 / 無効に切り替え |

@@ -148,6 +148,28 @@
                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,16,8"/>
             </WrapPanel>
 
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="重複抑止キャッシュ件数"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding YouTubeMessageCacheSize, UpdateSourceTrigger=PropertyChanged}"
+                         VerticalContentAlignment="Center"
+                         Margin="0,0,8,0"/>
+                <TextBlock Grid.Column="2"
+                           Text="100以上。再接続時の旧コメント抑止に使います。多いほど再表示を防ぎやすいですが、保持メモリは増えます。"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           VerticalAlignment="Center"/>
+            </Grid>
+
                 <Button Content="💬 YouTube コメントをプレビュー"
                     Command="{Binding PreviewYouTubeCommentCommand}"
                     Height="34"

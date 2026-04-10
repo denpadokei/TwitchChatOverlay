@@ -403,6 +403,20 @@ namespace TwitchChatOverlay.ViewModels
             set => this.SetProperty(ref field, value);
         }
 
+        public int YouTubeMessageCacheSize
+        {
+            get;
+            set
+            {
+                var clamped = Math.Max(value, YouTubeLiveChatService.MinMessageCacheSize);
+
+                if (this.SetProperty(ref field, clamped))
+                {
+                    this._youTubeLiveChatService.MessageCacheSize = clamped;
+                }
+            }
+        } = YouTubeLiveChatService.DefaultMessageCacheSize;
+
         public bool ObsWebSocketEnabled
         {
             get;
@@ -1296,6 +1310,7 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ShowYouTubeSuperChat = this.ShowYouTubeSuperChat;
                 settings.ShowYouTubeMembership = this.ShowYouTubeMembership;
                 settings.YouTubeLegalConsentAccepted = this.YouTubeLegalConsentAccepted;
+                settings.YouTubeMessageCacheSize = this.YouTubeMessageCacheSize;
                 settings.ObsWebSocketEnabled = this.ObsWebSocketEnabled;
                 settings.ObsWebSocketHost = this.ObsWebSocketHost;
                 settings.ObsWebSocketPort = this.ObsWebSocketPort;
@@ -1357,6 +1372,9 @@ namespace TwitchChatOverlay.ViewModels
                 this.ShowYouTubeSuperChat = settings.ShowYouTubeSuperChat;
                 this.ShowYouTubeMembership = settings.ShowYouTubeMembership;
                 this.YouTubeLegalConsentAccepted = settings.YouTubeLegalConsentAccepted;
+                this.YouTubeMessageCacheSize = Math.Max(
+                    settings.YouTubeMessageCacheSize,
+                    YouTubeLiveChatService.MinMessageCacheSize);
                 this.ObsWebSocketEnabled = settings.ObsWebSocketEnabled;
                 this.ObsWebSocketHost = string.IsNullOrWhiteSpace(settings.ObsWebSocketHost) ? "127.0.0.1" : settings.ObsWebSocketHost;
                 this.ObsWebSocketPort = settings.ObsWebSocketPort > 0 ? settings.ObsWebSocketPort : 4455;
