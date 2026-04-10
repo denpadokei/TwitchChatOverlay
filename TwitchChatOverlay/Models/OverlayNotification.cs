@@ -19,15 +19,16 @@ namespace TwitchChatOverlay.Models
 
     public class OverlayNotification
     {
+        public string SourcePlatform { get; set; } = "Twitch";
         public NotificationType Type { get; set; }
         public string Username { get; set; }
         public string DisplayText { get; set; }
         public string SubText { get; set; }
         public string UserColor { get; set; }
         public DateTime Timestamp { get; set; } = DateTime.Now;
-        public List<object> Fragments { get; set; } = new();
+        public List<object> Fragments { get; set; } = [];
 
-        public string TypeIcon => Type switch
+        public string TypeIcon => this.Type switch
         {
             NotificationType.Chat => "💬",
             NotificationType.Reward => "🎁",
@@ -41,7 +42,7 @@ namespace TwitchChatOverlay.Models
             _ => "💬"
         };
 
-        public Color ThemeColor => Type switch
+        public Color ThemeColor => this.Type switch
         {
             NotificationType.Chat => Color.FromRgb(255, 255, 255),
             NotificationType.Reward => Color.FromRgb(255, 215, 0),

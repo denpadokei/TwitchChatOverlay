@@ -5,11 +5,13 @@
 
   使い方:
     1. このファイルを build\local.props にコピー
-    2. TwitchClientId に実際の値を入力
-    3. ビルド時に自動的に読み込まれ BuildSecrets.g.cs（BuildSecrets.ClientId）に反映されます
+    2. TwitchClientId / YouTubeClientId に実際の値を入力
+    3. ビルド時に自動的に読み込まれ BuildSecrets.g.cs（BuildSecrets.ClientId / BuildSecrets.YouTubeClientId）に反映されます
 -->
 <Project>
   <PropertyGroup>
     <TwitchClientId>your_client_id_here</TwitchClientId>
+    <YouTubeClientId>your_youtube_client_id_here</YouTubeClientId>
+    <YouTubeClientSecret>your_youtube_client_secret_here</YouTubeClientSecret>
   </PropertyGroup>
 </Project>

@@ -1,13 +1,12 @@
+using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
 
 namespace TwitchChatOverlay.Services
 {
@@ -46,7 +45,7 @@ namespace TwitchChatOverlay.Services
 #if DEBUG
             var v = new Version(0, 0, 1);
 #else
-            var v = Assembly.GetExecutingAssembly().GetName().Version;
+            var v = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
 #endif
             return v is null ? "0.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
         }
@@ -57,35 +56,40 @@ namespace TwitchChatOverlay.Services
             var response = await _http.GetStringAsync(ApiUrl);
             var json = JObject.Parse(response);
 
-            string tagName = json["tag_name"]?.Value<string>() ?? "";
-            string htmlUrl = json["html_url"]?.Value<string>() ?? "";
+            var tagName = json["tag_name"]?.Value<string>() ?? "";
+            var htmlUrl = json["html_url"]?.Value<string>() ?? "";
 
             // tag_name は "v0.2.0" や "0.2.0" の形式を想定
-            string normalizedTag = tagName.TrimStart('v');
+            var normalizedTag = tagName.TrimStart('v');
 
             if (!Version.TryParse(normalizedTag, out var latestVersion))
+            {
                 return new UpdateCheckResult { IsUpdateAvailable = false };
+            }
 
-            string currentRaw = GetCurrentVersion();
+            var currentRaw = GetCurrentVersion();
             if (!Version.TryParse(currentRaw, out var currentVersion))
+            {
                 return new UpdateCheckResult { IsUpdateAvailable = false };
+            }
 
             if (latestVersion <= currentVersion)
+            {
                 return new UpdateCheckResult { IsUpdateAvailable = false };
+            }
 
             // アセットから .exe または .zip を探し、そのファイル名に対応する .sha256 をペアリングして取得する
             string downloadUrl = null;
             string checksumUrl = null;
-            var assets = json["assets"] as JArray;
-            if (assets != null)
+            if (json["assets"] is JArray assets)
             {
                 string downloadName = null;
 
                 // まずダウンロード対象のアセット (.exe 優先, なければ .zip) を決定する
                 foreach (var asset in assets)
                 {
-                    string name = asset["name"]?.Value<string>() ?? "";
-                    string assetUrl = asset["browser_download_url"]?.Value<string>();
+                    var name = asset["name"]?.Value<string>() ?? "";
+                    var assetUrl = asset["browser_download_url"]?.Value<string>();
 
                     if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                     {
@@ -105,11 +109,11 @@ namespace TwitchChatOverlay.Services
                 // ダウンロード対象が決まっていれば、そのファイル名に対応する .sha256 を探す
                 if (downloadName != null)
                 {
-                    string checksumTargetName = downloadName + ".sha256";
+                    var checksumTargetName = downloadName + ".sha256";
 
                     foreach (var asset in assets)
                     {
-                        string name = asset["name"]?.Value<string>() ?? "";
+                        var name = asset["name"]?.Value<string>() ?? "";
                         if (name.Equals(checksumTargetName, StringComparison.OrdinalIgnoreCase))
                         {
                             checksumUrl = asset["browser_download_url"]?.Value<string>();
@@ -140,10 +144,16 @@ namespace TwitchChatOverlay.Services
         private static void ValidateDownloadUrl(string url)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
                 throw new InvalidOperationException("ダウンロード URL が不正です。");
+            }
+
             if (uri.Scheme != Uri.UriSchemeHttps)
+            {
                 throw new InvalidOperationException("HTTPS 以外のダウンロード URL は許可されていません。");
-            bool trusted = false;
+            }
+
+            var trusted = false;
             foreach (var host in TrustedHosts)
             {
                 if (uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase) ||
@@ -154,34 +164,39 @@ namespace TwitchChatOverlay.Services
                 }
             }
             if (!trusted)
+            {
                 throw new InvalidOperationException($"信頼されていないホストからのダウンロードは許可されていません: {uri.Host}");
+            }
         }
 
         public async Task<string> DownloadUpdateAsync(string url, string checksumUrl, IProgress<int> progress)
         {
             ValidateDownloadUrl(url);
 
-            string tempDir = Path.Combine(Path.GetTempPath(), "TwitchChatOverlay");
-            Directory.CreateDirectory(tempDir);
+            var tempDir = Path.Combine(Path.GetTempPath(), "TwitchChatOverlay");
+            _ = Directory.CreateDirectory(tempDir);
 
-            string fileName = Path.GetFileName(new Uri(url).AbsolutePath);
+            var fileName = Path.GetFileName(new Uri(url).AbsolutePath);
             // URLデコード（%20 など）
             fileName = Uri.UnescapeDataString(fileName);
             // パストラバーサル防止: ファイル名のみを使用
             fileName = Path.GetFileName(fileName);
             if (string.IsNullOrWhiteSpace(fileName))
+            {
                 throw new InvalidOperationException("ダウンロード先ファイル名を決定できません。");
-            string destPath = Path.Combine(tempDir, fileName);
+            }
+
+            var destPath = Path.Combine(tempDir, fileName);
 
             using var response = await _downloadHttp.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-            response.EnsureSuccessStatusCode();
+            _ = response.EnsureSuccessStatusCode();
 
-            long? totalBytes = response.Content.Headers.ContentLength;
+            var totalBytes = response.Content.Headers.ContentLength;
 
             await using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
             await using (var stream = await response.Content.ReadAsStreamAsync())
             {
-                byte[] buffer = new byte[81920];
+                var buffer = new byte[81920];
                 long downloaded = 0;
                 int read;
 
@@ -191,7 +206,9 @@ namespace TwitchChatOverlay.Services
                     downloaded += read;
 
                     if (totalBytes.HasValue && totalBytes > 0)
+                    {
                         progress?.Report((int)(downloaded * 100 / totalBytes.Value));
+                    }
                 }
 
                 await fs.FlushAsync();
@@ -201,7 +218,9 @@ namespace TwitchChatOverlay.Services
 
             // チェックサムファイルがある場合は SHA256 を検証する
             if (!string.IsNullOrEmpty(checksumUrl))
-                await VerifySha256Async(destPath, checksumUrl);
+            {
+                await this.VerifySha256Async(destPath, checksumUrl);
+            }
 
             LogService.Info($"ダウンロード完了およびSHA256検証成功: {destPath}");
             return destPath;
@@ -215,7 +234,7 @@ namespace TwitchChatOverlay.Services
         {
             ValidateDownloadUrl(checksumUrl);
 
-            string checksumText = await _http.GetStringAsync(checksumUrl);
+            var checksumText = await _http.GetStringAsync(checksumUrl);
             // 最初のトークン（空白区切り）がハッシュ値
             var tokens = checksumText.Split(new[] { ' ', '\t', '\r', '\n' },
                 StringSplitOptions.RemoveEmptyEntries);
@@ -225,9 +244,9 @@ namespace TwitchChatOverlay.Services
                 throw new InvalidOperationException(
                     "SHA256 チェックサムファイル(.sha256)の形式が不正です。ファイルが空か、ハッシュ値が含まれていません。");
             }
-            string expectedHash = tokens[0].ToLowerInvariant();
+            var expectedHash = tokens[0].ToLowerInvariant();
 
-            string actualHash = await ComputeSha256Async(localFilePath);
+            var actualHash = await ComputeSha256Async(localFilePath);
 
             if (!string.Equals(expectedHash, actualHash, StringComparison.OrdinalIgnoreCase))
             {
@@ -242,37 +261,40 @@ namespace TwitchChatOverlay.Services
         {
             await using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
                 FileShare.Read, bufferSize: 81920, useAsync: true);
-            byte[] hashBytes = await SHA256.HashDataAsync(fs);
+            var hashBytes = await SHA256.HashDataAsync(fs);
             return Convert.ToHexString(hashBytes).ToLowerInvariant();
         }
 
         public void LaunchInstaller(string filePath)
         {
             LogService.Info($"インストーラー起動: {filePath}");
-            string currentExe = Process.GetCurrentProcess().MainModule!.FileName;
-            string currentDir = Path.GetDirectoryName(currentExe)!;
+            var currentExe = Process.GetCurrentProcess().MainModule!.FileName;
+            var currentDir = Path.GetDirectoryName(currentExe)!;
 
             if (filePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             {
-                Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
+                _ = Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true });
                 System.Windows.Application.Current.Dispatcher.Invoke(
-                    () => System.Windows.Application.Current.Shutdown());
+                    System.Windows.Application.Current.Shutdown);
             }
             else if (filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
-                string extractDir = Path.Combine(
+                var extractDir = Path.Combine(
                     Path.GetDirectoryName(filePath)!,
                     Path.GetFileNameWithoutExtension(filePath));
                 if (Directory.Exists(extractDir))
+                {
                     Directory.Delete(extractDir, true);
+                }
+
                 ZipFile.ExtractToDirectory(filePath, extractDir);
 
-                int pid = Process.GetCurrentProcess().Id;
-                string tempDir = Path.GetDirectoryName(filePath)!;
+                var pid = Process.GetCurrentProcess().Id;
+                var tempDir = Path.GetDirectoryName(filePath)!;
 
                 // cmd.exe のバッチファイルで自己更新（PowerShell Bypass を回避）
                 // chcp 65001 で UTF-8 コードページに切り替え、Unicode パスに対応
-                string scriptContent =
+                var scriptContent =
                     $"@echo off\r\n" +
                     $"chcp 65001 >NUL\r\n" +
                     $":wait\r\n" +
@@ -283,27 +305,27 @@ namespace TwitchChatOverlay.Services
                     $"ping -n 4 127.0.0.1 >NUL\r\n" +
                     $"rd /S /Q \"{tempDir}\"\r\n";
 
-                string scriptPath = Path.Combine(
+                var scriptPath = Path.Combine(
                     Path.GetTempPath(),
                     $"TwitchChatOverlay_update_{pid}_{Guid.NewGuid():N}.bat");
                 using var fsBat = new FileStream(scriptPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 using var writer = new StreamWriter(fsBat, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 writer.Write(scriptContent);
 
-                Process.Start(new ProcessStartInfo("cmd.exe", $"/C \"{scriptPath}\"")
+                _ = Process.Start(new ProcessStartInfo("cmd.exe", $"/C \"{scriptPath}\"")
                 {
                     UseShellExecute = true,
                     WindowStyle = ProcessWindowStyle.Minimized,
                 });
 
                 System.Windows.Application.Current.Dispatcher.Invoke(
-                    () => System.Windows.Application.Current.Shutdown());
+                    System.Windows.Application.Current.Shutdown);
             }
         }
 
         public void OpenReleasePage(string url)
         {
-            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
     }
 }

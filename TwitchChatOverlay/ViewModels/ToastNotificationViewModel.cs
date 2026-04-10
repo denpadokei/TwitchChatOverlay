@@ -1,8 +1,8 @@
+using Prism.Mvvm;
 using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Media;
-using Prism.Mvvm;
 using TwitchChatOverlay.Models;
 using TwitchChatOverlay.Services;
 
@@ -38,24 +38,24 @@ namespace TwitchChatOverlay.ViewModels
             ToastFontColorMode fontColorMode = ToastFontColorMode.Auto,
             string customFontColor = "#FFFFFF")
         {
-            TypeIcon = notification.TypeIcon;
-            Username = notification.Username;
-            DisplayText = notification.DisplayText;
-            SubText = notification.SubText;
-            HasSubText = !string.IsNullOrEmpty(notification.SubText);
-            Fragments = notification.Fragments?.Count > 0 ? notification.Fragments : null;
-            HasFragments = Fragments?.Count > 0 == true;
-            NoFragments = !HasFragments;
-            FontSize = fontSize;
-            UsernameFontSize = fontSize + 1;
-            SubTextFontSize = Math.Max(8, fontSize - 1);
-            ThemeColorBrush = new SolidColorBrush(notification.ThemeColor);
+            this.TypeIcon = notification.TypeIcon;
+            this.Username = notification.Username;
+            this.DisplayText = notification.DisplayText;
+            this.SubText = notification.SubText;
+            this.HasSubText = !string.IsNullOrEmpty(notification.SubText);
+            this.Fragments = notification.Fragments?.Count > 0 ? notification.Fragments : null;
+            this.HasFragments = (this.Fragments?.Count > 0) == true;
+            this.NoFragments = !this.HasFragments;
+            this.FontSize = fontSize;
+            this.UsernameFontSize = fontSize + 1;
+            this.SubTextFontSize = Math.Max(8, fontSize - 1);
+            this.ThemeColorBrush = new SolidColorBrush(notification.ThemeColor);
 
-            FontFamily = string.IsNullOrWhiteSpace(fontFamilyName)
+            this.FontFamily = string.IsNullOrWhiteSpace(fontFamilyName)
                 ? SystemFonts.MessageFontFamily
                 : new FontFamily(fontFamilyName);
 
-            (BackgroundBrush, TextForegroundBrush, SubTextForegroundBrush) =
+            (this.BackgroundBrush, this.TextForegroundBrush, this.SubTextForegroundBrush) =
                 ResolveColors(backgroundOpacity, bgMode, customBgColor, fontColorMode, customFontColor);
 
             if (!string.IsNullOrEmpty(notification.UserColor) &&
@@ -65,16 +65,16 @@ namespace TwitchChatOverlay.ViewModels
                 try
                 {
                     var color = (Color)ColorConverter.ConvertFromString(notification.UserColor);
-                    UserColorBrush = new SolidColorBrush(color);
+                    this.UserColorBrush = new SolidColorBrush(color);
                 }
                 catch
                 {
-                    UserColorBrush = new SolidColorBrush(Colors.White);
+                    this.UserColorBrush = new SolidColorBrush(Colors.White);
                 }
             }
             else
             {
-                UserColorBrush = new SolidColorBrush(Colors.White);
+                this.UserColorBrush = new SolidColorBrush(Colors.White);
             }
         }
 
@@ -82,14 +82,14 @@ namespace TwitchChatOverlay.ViewModels
             ResolveColors(double opacity, ToastBackgroundMode bgMode, string customBgHex,
                           ToastFontColorMode fontColorMode, string customFontHex)
         {
-            byte alpha = (byte)Math.Clamp(opacity * 255, 0, 255);
-            Color baseColor = bgMode switch
+            var alpha = (byte)Math.Clamp(opacity * 255, 0, 255);
+            var baseColor = bgMode switch
             {
-                ToastBackgroundMode.Dark   => Color.FromRgb(0x1A, 0x1A, 0x2E),
-                ToastBackgroundMode.Light  => Color.FromRgb(0xF5, 0xF5, 0xF5),
+                ToastBackgroundMode.Dark => Color.FromRgb(0x1A, 0x1A, 0x2E),
+                ToastBackgroundMode.Light => Color.FromRgb(0xF5, 0xF5, 0xF5),
                 ToastBackgroundMode.System => SystemColors.WindowColor,
                 ToastBackgroundMode.Custom => ParseHex(customBgHex),
-                _                          => Color.FromRgb(0x1A, 0x1A, 0x2E)
+                _ => Color.FromRgb(0x1A, 0x1A, 0x2E)
             };
 
             var bg = new SolidColorBrush(Color.FromArgb(alpha, baseColor.R, baseColor.G, baseColor.B));
@@ -100,17 +100,17 @@ namespace TwitchChatOverlay.ViewModels
             if (fontColorMode == ToastFontColorMode.Custom)
             {
                 var fgColor = ParseHex(customFontHex);
-                fg  = new SolidColorBrush(fgColor);
+                fg = new SolidColorBrush(fgColor);
                 // サブテキストはメイン色を少し薄くする
                 sub = new SolidColorBrush(Color.FromArgb(0xCC, fgColor.R, fgColor.G, fgColor.B));
             }
             else
             {
-                bool isDark = bgMode == ToastBackgroundMode.Dark ||
+                var isDark = bgMode == ToastBackgroundMode.Dark ||
                               (bgMode == ToastBackgroundMode.Custom && IsColorDark(baseColor)) ||
                               (bgMode == ToastBackgroundMode.System && IsColorDark(SystemColors.WindowColor));
 
-                fg  = new SolidColorBrush(isDark ? Colors.White : Color.FromRgb(0x1A, 0x1A, 0x2E));
+                fg = new SolidColorBrush(isDark ? Colors.White : Color.FromRgb(0x1A, 0x1A, 0x2E));
                 sub = new SolidColorBrush(isDark ? Color.FromRgb(0xCC, 0xCC, 0xCC) : Color.FromRgb(0x55, 0x55, 0x55));
             }
 
@@ -120,13 +120,19 @@ namespace TwitchChatOverlay.ViewModels
         private static bool IsColorDark(Color c)
         {
             double r = c.R / 255.0, g = c.G / 255.0, b = c.B / 255.0;
-            return (0.299 * r + 0.587 * g + 0.114 * b) < 0.5;
+            return ((0.299 * r) + (0.587 * g) + (0.114 * b)) < 0.5;
         }
 
         private static Color ParseHex(string hex)
         {
-            try { return (Color)ColorConverter.ConvertFromString(hex); }
-            catch { return Color.FromRgb(0x1A, 0x1A, 0x2E); }
+            try
+            {
+                return (Color)ColorConverter.ConvertFromString(hex);
+            }
+            catch
+            {
+                return Color.FromRgb(0x1A, 0x1A, 0x2E);
+            }
         }
     }
 }

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TwitchChatOverlay Privacy Policy</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f7f4ec;
+            --panel: #fffdf8;
+            --text: #1f2933;
+            --muted: #586574;
+            --accent: #cf3f28;
+            --border: #dfd4c4;
+            --link: #005ea8;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(180deg, #efe7d8 0%, var(--bg) 100%);
+            color: var(--text);
+        }
+
+        main {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 32px 20px 56px;
+        }
+
+        section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 20px;
+            margin-top: 16px;
+            box-shadow: 0 10px 24px rgba(60, 47, 33, 0.08);
+        }
+
+        h1, h2 {
+            margin-top: 0;
+        }
+
+        h1 {
+            font-size: 2rem;
+        }
+
+        h2 {
+            font-size: 1.15rem;
+            color: var(--accent);
+        }
+
+        p, li {
+            line-height: 1.7;
+        }
+
+        a {
+            color: var(--link);
+        }
+
+        .lead {
+            color: var(--muted);
+            max-width: 70ch;
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>TwitchChatOverlay Privacy Policy</h1>
+        <p class="lead">This Privacy Policy explains what information TwitchChatOverlay accesses, how it is stored and used, and how users can revoke consent or delete locally stored authorization data when the app uses Twitch and YouTube API Services. Please review this policy before using the YouTube feature.</p>
+
+        <section>
+            <h2>1. About the App</h2>
+            <p>TwitchChatOverlay is a Windows desktop application that displays Twitch and YouTube live event notifications and live chat notifications for a broadcaster. The YouTube feature uses YouTube API Services.</p>
+        </section>
+
+        <section>
+            <h2>2. Information Accessed or Stored</h2>
+            <p>For the YouTube feature, the app handles the following information:</p>
+            <ul>
+                <li>YouTube OAuth access token</li>
+                <li>YouTube OAuth refresh token</li>
+                <li>Authorization status text including token acquisition time</li>
+                <li>Display name, message text, Super Chat information, and membership information received from YouTube Live Chat</li>
+            </ul>
+            <p>Live chat display data is processed in memory to show notifications. The app is not intended to permanently store YouTube user data or chat history beyond locally stored OAuth-related information.</p>
+        </section>
+
+        <section>
+            <h2>3. Purpose of Use</h2>
+            <ul>
+                <li>To display YouTube live chat, Super Chat, and membership notifications</li>
+                <li>To detect stream start and maintain the live chat connection</li>
+                <li>To allow the user to continue using the app without re-authorizing every time</li>
+            </ul>
+            <p>The app does not use YouTube data for advertising, sale, third-party transfer, profiling, or sale of derived metrics.</p>
+        </section>
+
+        <section>
+            <h2>4. Storage and Protection</h2>
+            <p>YouTube OAuth tokens and app settings are stored in a local settings file after being protected with Windows user-scoped data protection. The storage location is typically the TwitchChatOverlay settings file under the user's Application Data folder.</p>
+            <p>The app requests only a YouTube read-only OAuth scope.</p>
+        </section>
+
+        <section>
+            <h2>5. Third-Party Sharing</h2>
+            <p>The app is not intended to send YouTube OAuth tokens or settings to any developer-operated external server or sell them to third parties. Communication with YouTube API Services, Google pages, or YouTube pages explicitly opened by the user is handled directly by the respective services.</p>
+        </section>
+
+        <section>
+            <h2>6. Revocation and Deletion</h2>
+            <p>Users can manage stored data and access in the following ways:</p>
+            <ul>
+                <li>Delete locally stored YouTube authorization data from the YouTube tab in the app</li>
+                <li>Attempt Google-side revocation from the YouTube tab in the app</li>
+                <li>Manually revoke access to the app from the Google permissions management page</li>
+            </ul>
+            <p>If the user revokes Google-side access and also wants locally stored data removed, they should perform the local deletion action in the app as well. Local deletion does not delete data stored by YouTube.</p>
+            <p><a href="https://security.google.com/settings/security/permissions">Google permissions management page</a></p>
+        </section>
+
+        <section>
+            <h2>7. Related External Policies</h2>
+            <ul>
+                <li><a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a></li>
+                <li><a href="https://developers.google.com/youtube/terms/api-services-terms-of-service">YouTube API Services Terms of Service</a></li>
+                <li><a href="https://developers.google.com/youtube/terms/developer-policies">YouTube Developer Policies</a></li>
+                <li><a href="https://policies.google.com/privacy">Google Privacy Policy</a></li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>8. Contact</h2>
+            <p>Questions about the app's privacy practices or stored data handling can be submitted through GitHub Discussions.</p>
+            <p><a href="https://github.com/denpadokei/TwitchChatOverlay/discussions">TwitchChatOverlay Discussions</a></p>
+        </section>
+    </main>
+</body>
+</html>

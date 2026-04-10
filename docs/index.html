@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TwitchChatOverlay</title>
+    <meta name="description" content="TwitchChatOverlay は、Twitch と YouTube のライブチャットやイベントを Windows デスクトップに通知表示するアプリです。">
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f6efe3;
+            --panel: rgba(255, 252, 247, 0.88);
+            --panel-strong: #fffaf2;
+            --text: #1f2a37;
+            --muted: #576574;
+            --line: rgba(121, 96, 58, 0.18);
+            --accent: #c44a2d;
+            --accent-strong: #9e341b;
+            --subaccent: #0f766e;
+            --link: #005ea8;
+            --shadow: 0 20px 50px rgba(76, 54, 24, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Yu Gothic UI", "Meiryo UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(196, 74, 45, 0.14), transparent 34%),
+                radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 28%),
+                linear-gradient(180deg, #f3e7d3 0%, var(--bg) 38%, #fbf7ef 100%);
+        }
+
+        a {
+            color: var(--link);
+        }
+
+        .shell {
+            width: min(1080px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 24px 0 56px;
+        }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            background: linear-gradient(135deg, rgba(255, 248, 238, 0.94), rgba(250, 255, 252, 0.9));
+            box-shadow: var(--shadow);
+            padding: 56px 28px 32px;
+        }
+
+        .hero::before,
+        .hero::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            filter: blur(4px);
+            opacity: 0.7;
+        }
+
+        .hero::before {
+            width: 220px;
+            height: 220px;
+            top: -60px;
+            right: -80px;
+            background: rgba(196, 74, 45, 0.12);
+        }
+
+        .hero::after {
+            width: 180px;
+            height: 180px;
+            bottom: -70px;
+            left: -50px;
+            background: rgba(15, 118, 110, 0.12);
+        }
+
+        .hero-grid {
+            position: relative;
+            display: grid;
+            gap: 24px;
+            align-items: start;
+        }
+
+        .eyebrow {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(196, 74, 45, 0.1);
+            color: var(--accent-strong);
+            font-size: 0.9rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        h1 {
+            margin: 16px 0 14px;
+            font-size: clamp(2.1rem, 5vw, 4.1rem);
+            line-height: 1.03;
+        }
+
+        .lead {
+            max-width: 60ch;
+            margin: 0;
+            color: var(--muted);
+            font-size: 1.05rem;
+            line-height: 1.8;
+        }
+
+        .hero-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 46px;
+            padding: 0 18px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-weight: 700;
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+        }
+
+        .button-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+            color: #fff;
+            box-shadow: 0 12px 28px rgba(158, 52, 27, 0.24);
+        }
+
+        .button-secondary {
+            background: rgba(255, 255, 255, 0.7);
+            color: var(--text);
+            border: 1px solid var(--line);
+        }
+
+        .hero-card {
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.72);
+            padding: 20px;
+            backdrop-filter: blur(8px);
+        }
+
+        .hero-card h2 {
+            margin: 0 0 12px;
+            font-size: 1rem;
+            color: var(--subaccent);
+        }
+
+        .hero-card ul {
+            margin: 0;
+            padding-left: 20px;
+            line-height: 1.8;
+        }
+
+        .grid {
+            display: grid;
+            gap: 18px;
+            margin-top: 22px;
+        }
+
+        .card {
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            padding: 24px;
+        }
+
+        .card h2 {
+            margin: 0 0 12px;
+            font-size: 1.2rem;
+            color: var(--accent-strong);
+        }
+
+        .card p,
+        .card li {
+            line-height: 1.8;
+        }
+
+        .card ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        .link-list {
+            display: grid;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .link-panel {
+            display: block;
+            padding: 16px 18px;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: var(--panel-strong);
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .link-panel strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--text);
+        }
+
+        .link-panel span {
+            color: var(--muted);
+        }
+
+        .mini {
+            color: var(--muted);
+            font-size: 0.95rem;
+        }
+
+        footer {
+            padding: 20px 4px 0;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        @media (min-width: 860px) {
+            .hero-grid {
+                grid-template-columns: 1.6fr 0.9fr;
+            }
+
+            .grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .card-wide {
+                grid-column: 1 / -1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <section class="hero">
+            <div class="hero-grid">
+                <div>
+                    <span class="eyebrow">Windows desktop app for stream notifications</span>
+                    <h1>TwitchChatOverlay</h1>
+                    <p class="lead">TwitchChatOverlay は、Twitch と YouTube のライブチャット、Super Chat、メンバーシップ通知などを Windows デスクトップ上に表示する配信者向けアプリです。YouTube 機能は YouTube API Services を利用し、読み取り専用権限で動作します。</p>
+                    <div class="hero-actions">
+                        <a class="button button-primary" href="privacy.html">Privacy Policy</a>
+                        <a class="button button-secondary" href="terms.html">Terms of Use</a>
+                        <a class="button button-secondary" href="https://github.com/denpadokei/TwitchChatOverlay">GitHub Repository</a>
+                    </div>
+                </div>
+                <aside class="hero-card">
+                    <h2>Brand verification summary</h2>
+                    <ul>
+                        <li>App name: TwitchChatOverlay</li>
+                        <li>Platform: Windows desktop application</li>
+                        <li>YouTube scope: youtube.readonly only</li>
+                        <li>Primary use: local on-screen notifications for broadcasters</li>
+                    </ul>
+                </aside>
+            </div>
+        </section>
+
+        <section class="grid">
+            <article class="card">
+                <h2>アプリの役割</h2>
+                <p>このアプリは配信中のコメントやイベントをローカル PC 上で見やすく表示するための補助ツールです。動画のアップロード、コメント投稿、プレイリスト編集、チャンネル管理などの書き込み操作は行いません。</p>
+            </article>
+
+            <article class="card">
+                <h2>Google に伝わるべき点</h2>
+                <ul>
+                    <li>YouTube 機能は YouTube Live Chat の読み取りと通知表示のために使われます。</li>
+                    <li>OAuth トークンはローカル端末にのみ保存されます。</li>
+                    <li>ユーザーはアプリ内からローカル削除と Google 側の権限取り消しを実行できます。</li>
+                </ul>
+            </article>
+
+            <article class="card card-wide">
+                <h2>公開リンク</h2>
+                <div class="link-list">
+                    <a class="link-panel" href="privacy.html">
+                        <strong>Privacy Policy</strong>
+                        <span>Google OAuth consent screen のプライバシーポリシー URL に設定する想定の公開ページです。</span>
+                    </a>
+                    <a class="link-panel" href="terms.html">
+                        <strong>Terms of Use</strong>
+                        <span>Google OAuth consent screen の利用規約 URL に設定する想定の公開ページです。</span>
+                    </a>
+                </div>
+            </article>
+
+            <article class="card">
+                <h2>サポート</h2>
+                <p>問い合わせ窓口として GitHub Discussions を利用しています。OAuth 設定、YouTube 機能、保存データの削除方法などの案内を掲載できます。</p>
+                <p><a href="https://github.com/denpadokei/TwitchChatOverlay/discussions">GitHub Discussions</a></p>
+            </article>
+
+            <article class="card">
+                <h2>English summary</h2>
+                <p>TwitchChatOverlay is a Windows desktop app for streamers. It reads Twitch and YouTube live events and displays them locally as on-screen notifications. The YouTube integration uses YouTube API Services with read-only access.</p>
+                <p class="mini">This page exists to identify the app, link to its privacy policy and terms, and provide a public home page for OAuth branding verification.</p>
+            </article>
+        </section>
+
+        <footer>
+            <p>This site is intended for public app information and OAuth branding verification for TwitchChatOverlay.</p>
+        </footer>
+    </div>
+</body>
+</html>

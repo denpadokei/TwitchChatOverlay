@@ -5,23 +5,53 @@
   <PropertyGroup>
     <!-- ビルド時にGitHub Actionsから注入されるシークレット。ローカルビルド時は空文字。 -->
     <TwitchClientId Condition="'$(TwitchClientId)' == ''"></TwitchClientId>
+    <YouTubeClientId Condition="'$(YouTubeClientId)' == ''"></YouTubeClientId>
+    <YouTubeClientSecret Condition="'$(YouTubeClientSecret)' == ''"></YouTubeClientSecret>
   </PropertyGroup>
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>0.3.3</Version>
-    <AssemblyVersion>0.3.3.0</AssemblyVersion>
-    <FileVersion>0.3.3.0</FileVersion>
+    <Version>0.4.0</Version>
+    <AssemblyVersion>0.4.0.0</AssemblyVersion>
+    <FileVersion>0.4.0.0</FileVersion>
     <AssemblyTitle>TwitchChatOverlay</AssemblyTitle>
     <Company>denpadokei</Company>
     <Product>TwitchChatOverlay</Product>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.34.1" />
+    <PackageReference Include="Grpc.Net.Client" Version="2.76.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.80.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.142" />
+    <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
     <PackageReference Include="Prism.DryIoc" Version="8.1.97" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="XamlAnimatedGif" Version="2.3.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Protos\youtube_live_chat_stream.proto" GrpcServices="Client" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="NotificationSound\NotificationSound.mp3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Docs\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="icon.ico" />
   </ItemGroup>
 
   <!-- ビルド前にシークレットを含むC#ファイルを自動生成するターゲット -->
@@ -31,7 +61,7 @@
       <!-- GetFullPath でトレイリングスラッシュを除去（バックスラッシュがクォートをエスケープするのを防ぐ） -->
       <_BuildSecretsOut>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)'))</_BuildSecretsOut>
     </PropertyGroup>
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BuildSecretsScript)&quot; -ClientId &quot;$(TwitchClientId)&quot; -OutPath &quot;$(_BuildSecretsOut)&quot;" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BuildSecretsScript)&quot; -ClientId &quot;$(TwitchClientId)&quot; -YouTubeClientId &quot;$(YouTubeClientId)&quot; -YouTubeClientSecret &quot;$(YouTubeClientSecret)&quot; -OutPath &quot;$(_BuildSecretsOut)&quot;" />
     <ItemGroup>
       <Compile Include="$(_BuildSecretsOut)\BuildSecrets.g.cs" />
     </ItemGroup>

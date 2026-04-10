@@ -31,7 +31,9 @@
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontSize" Value="14"/>
             <Setter Property="FontWeight" Value="Normal"/>
-            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -59,7 +61,9 @@
             <Setter Property="Background" Value="{StaticResource TwitchDarkPurpleBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -84,7 +88,9 @@
             <Setter Property="Background" Value="{StaticResource TwitchGreenBrush}"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">

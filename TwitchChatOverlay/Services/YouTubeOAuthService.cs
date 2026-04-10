@@ -1,0 +1,306 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace TwitchChatOverlay.Services
+{
+    public class YouTubeTokenResponse
+    {
+        [JsonProperty("access_token")]
+        public string AccessToken { get; set; }
+
+        [JsonProperty("refresh_token")]
+        public string RefreshToken { get; set; }
+
+        [JsonProperty("expires_in")]
+        public int ExpiresIn { get; set; }
+
+        [JsonProperty("scope")]
+        public string Scope { get; set; }
+
+        [JsonProperty("token_type")]
+        public string TokenType { get; set; }
+    }
+
+    public enum YouTubeOAuthFailureReason
+    {
+        UserDenied,
+        TimedOut,
+        InvalidCallback,
+        AuthorizationFailed
+    }
+
+    public class YouTubeOAuthException : Exception
+    {
+        public YouTubeOAuthFailureReason Reason { get; }
+
+        public bool IsUserDenied => this.Reason == YouTubeOAuthFailureReason.UserDenied;
+        public bool IsTimedOut => this.Reason == YouTubeOAuthFailureReason.TimedOut;
+
+        public YouTubeOAuthException(YouTubeOAuthFailureReason reason, string message)
+            : base(message)
+        {
+            this.Reason = reason;
+        }
+    }
+
+    public class YouTubeOAuthService
+    {
+        private const string AuthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
+        private const string TokenEndpoint = "https://oauth2.googleapis.com/token";
+        private const string RevokeEndpoint = "https://oauth2.googleapis.com/revoke";
+        private static readonly HttpClient Http = new();
+
+        private readonly string[] _scopes =
+        {
+            "https://www.googleapis.com/auth/youtube.readonly"
+        };
+
+        private readonly string _clientSecret;
+
+        public YouTubeOAuthService(string clientSecret = null)
+        {
+            this._clientSecret = clientSecret;
+        }
+
+        public async Task<YouTubeTokenResponse> AuthorizeAsync(string clientId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                throw new InvalidOperationException("YouTubeClientId が未設定です。build/local.props を設定してください。");
+            }
+
+            var redirectUri = "http://127.0.0.1:18765/callback/";
+            var state = Guid.NewGuid().ToString("N");
+            var codeVerifier = CreateCodeVerifier();
+            var codeChallenge = CreateCodeChallenge(codeVerifier);
+
+            var authUrl = this.BuildAuthorizationUrl(clientId, redirectUri, state, codeChallenge);
+
+            using var listener = new HttpListener();
+            listener.Prefixes.Add(redirectUri);
+            try
+            {
+                listener.Start();
+            }
+            catch (HttpListenerException ex)
+            {
+                var redirectUriInfo = new Uri(redirectUri);
+                var endpoint = $"{redirectUriInfo.Host}:{redirectUriInfo.Port}";
+                throw new InvalidOperationException(
+                    $"YouTube OAuth のローカルコールバック待受を開始できませんでした ({endpoint})。" +
+                    "このアドレス/ポートが他のアプリで使用中か、待受の権限が不足している可能性があります。" +
+                    "他のアプリを停止して再試行するか、URL ACL/実行権限の設定を確認してください。",
+                    ex);
+            }
+
+            _ = Process.Start(new ProcessStartInfo
+            {
+                FileName = authUrl,
+                UseShellExecute = true
+            });
+
+            var contextTask = listener.GetContextAsync();
+            var completed = await Task.WhenAny(contextTask, Task.Delay(TimeSpan.FromMinutes(3), cancellationToken));
+            if (completed != contextTask)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.TimedOut, "YouTube OAuth のコールバック待機がタイムアウトしました。");
+            }
+
+            var context = await contextTask;
+            var code = context.Request.QueryString["code"];
+            var returnedState = context.Request.QueryString["state"];
+            var error = context.Request.QueryString["error"];
+
+            await WriteCallbackResponseAsync(context.Response, error);
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                if (string.Equals(error, "access_denied", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new YouTubeOAuthException(YouTubeOAuthFailureReason.UserDenied, "YouTube OAuth 認可がキャンセルされました。");
+                }
+
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.AuthorizationFailed, $"YouTube OAuth エラー: {error}");
+            }
+
+            if (string.IsNullOrEmpty(code))
+            {
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.InvalidCallback, "YouTube OAuth コールバックに code が含まれていません。");
+            }
+
+            if (!string.Equals(state, returnedState, StringComparison.Ordinal))
+            {
+                throw new YouTubeOAuthException(YouTubeOAuthFailureReason.InvalidCallback, "YouTube OAuth の state が一致しません。");
+            }
+
+            var token = await this.ExchangeCodeAsync(clientId, code, codeVerifier, redirectUri, cancellationToken);
+            return token;
+        }
+
+        public async Task<YouTubeTokenResponse> RefreshTokenAsync(string clientId, string refreshToken, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                throw new InvalidOperationException("YouTubeClientId が未設定です。");
+            }
+
+            if (string.IsNullOrWhiteSpace(refreshToken))
+            {
+                throw new InvalidOperationException("YouTube refresh token が未設定です。");
+            }
+
+            var parameters = new List<KeyValuePair<string, string>>
+            {
+                new("client_id", clientId),
+                new("grant_type", "refresh_token"),
+                new("refresh_token", refreshToken)
+            };
+            if (!string.IsNullOrWhiteSpace(this._clientSecret))
+            {
+                parameters.Add(new("client_secret", this._clientSecret));
+            }
+
+            var request = new FormUrlEncodedContent(parameters);
+
+            var response = await Http.PostAsync(TokenEndpoint, request, cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"YouTube トークン更新失敗: {(int)response.StatusCode} {json}");
+            }
+
+            var token = JsonConvert.DeserializeObject<YouTubeTokenResponse>(json)
+                ?? throw new Exception("YouTube トークン更新レスポンスの解析に失敗しました。");
+
+            if (string.IsNullOrEmpty(token.RefreshToken))
+            {
+                token.RefreshToken = refreshToken;
+            }
+
+            return token;
+        }
+
+        public async Task RevokeTokenAsync(string token, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                throw new InvalidOperationException("取り消し対象の YouTube トークンがありません。");
+            }
+
+            using var request = new FormUrlEncodedContent(
+            [
+                new KeyValuePair<string, string>("token", token)
+            ]);
+
+            var response = await Http.PostAsync(RevokeEndpoint, request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"YouTube OAuth トークン取り消し失敗: {(int)response.StatusCode} {body}");
+            }
+        }
+
+        private string BuildAuthorizationUrl(string clientId, string redirectUri, string state, string codeChallenge)
+        {
+            var scope = Uri.EscapeDataString(string.Join(" ", this._scopes));
+            return $"{AuthEndpoint}?client_id={Uri.EscapeDataString(clientId)}" +
+                   $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                   "&response_type=code" +
+                   $"&scope={scope}" +
+                   "&access_type=offline" +
+                   "&prompt=consent" +
+                   $"&state={Uri.EscapeDataString(state)}" +
+                   $"&code_challenge={Uri.EscapeDataString(codeChallenge)}" +
+                   "&code_challenge_method=S256";
+        }
+
+        private async Task<YouTubeTokenResponse> ExchangeCodeAsync(
+            string clientId,
+            string code,
+            string codeVerifier,
+            string redirectUri,
+            CancellationToken cancellationToken)
+        {
+            var parameters = new List<KeyValuePair<string, string>>
+            {
+                new("client_id", clientId),
+                new("code", code),
+                new("code_verifier", codeVerifier),
+                new("redirect_uri", redirectUri),
+                new("grant_type", "authorization_code")
+            };
+            if (!string.IsNullOrWhiteSpace(this._clientSecret))
+            {
+                parameters.Add(new("client_secret", this._clientSecret));
+            }
+
+            var request = new FormUrlEncodedContent(parameters);
+
+            var response = await Http.PostAsync(TokenEndpoint, request, cancellationToken);
+            var json = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = json;
+                try
+                {
+                    var obj = JObject.Parse(json);
+                    message = obj["error_description"]?.Value<string>() ?? obj["error"]?.Value<string>() ?? json;
+                }
+                catch
+                {
+                }
+
+                throw new Exception($"YouTube トークン取得失敗: {message}");
+            }
+
+            var token = JsonConvert.DeserializeObject<YouTubeTokenResponse>(json)
+                ?? throw new Exception("YouTube トークンレスポンスの解析に失敗しました。");
+
+            return token;
+        }
+
+        private static async Task WriteCallbackResponseAsync(HttpListenerResponse response, string error)
+        {
+            var html = string.IsNullOrEmpty(error)
+                ? "<html><body><h3>YouTube OAuth 完了</h3><p>アプリに戻ってください。</p></body></html>"
+                : $"<html><body><h3>YouTube OAuth 失敗</h3><p>{WebUtility.HtmlEncode(error)}</p></body></html>";
+            var body = Encoding.UTF8.GetBytes(html);
+            response.ContentType = "text/html; charset=utf-8";
+            response.ContentLength64 = body.Length;
+            await response.OutputStream.WriteAsync(body, 0, body.Length);
+            response.OutputStream.Close();
+        }
+
+        private static string CreateCodeVerifier()
+        {
+            var bytes = new byte[32];
+            RandomNumberGenerator.Fill(bytes);
+            return Base64UrlEncode(bytes);
+        }
+
+        private static string CreateCodeChallenge(string codeVerifier)
+        {
+            using var sha = SHA256.Create();
+            var hash = sha.ComputeHash(Encoding.ASCII.GetBytes(codeVerifier));
+            return Base64UrlEncode(hash);
+        }
+
+        private static string Base64UrlEncode(byte[] data)
+        {
+            return Convert.ToBase64String(data)
+                .TrimEnd('=')
+                .Replace('+', '-')
+                .Replace('/', '_');
+        }
+    }
+}
