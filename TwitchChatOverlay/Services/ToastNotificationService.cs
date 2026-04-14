@@ -10,7 +10,8 @@ namespace TwitchChatOverlay.Services
     public class ToastNotificationService
     {
         private readonly SettingsService _settingsService;
-        private readonly List<ToastNotificationWindow> _activeToasts = new();
+        private readonly NotificationSoundService _notificationSoundService;
+        private readonly List<ToastNotificationWindow> _activeToasts = [];
 
         private const double ToastHeight = 90;  // ActualHeight が取得できない場合の推定値
         private const double ToastMargin = 8;
@@ -24,8 +25,8 @@ namespace TwitchChatOverlay.Services
                 : WinForms.Screen.PrimaryScreen;
 
             // Default DPI to 1.0 when Application.Current or MainWindow is not available.
-            double dpiX = 1.0;
-            double dpiY = 1.0;
+            var dpiX = 1.0;
+            var dpiY = 1.0;
 
             var app = System.Windows.Application.Current;
             var mainWindow = app?.MainWindow;
@@ -40,33 +41,66 @@ namespace TwitchChatOverlay.Services
                 }
             }
             return (
-                screen.WorkingArea.Left   * dpiX,
-                screen.WorkingArea.Top    * dpiY,
-                screen.WorkingArea.Right  * dpiX,
+                screen.WorkingArea.Left * dpiX,
+                screen.WorkingArea.Top * dpiY,
+                screen.WorkingArea.Right * dpiX,
                 screen.WorkingArea.Bottom * dpiY
             );
         }
 
-        public ToastNotificationService(SettingsService settingsService)
+        public ToastNotificationService(SettingsService settingsService, NotificationSoundService notificationSoundService)
         {
-            _settingsService = settingsService;
+            this._settingsService = settingsService;
+            this._notificationSoundService = notificationSoundService;
         }
 
-        public void Initialize(TwitchEventSubService eventSubService)
+        public void Initialize(TwitchEventSubService twitchEventSubService, YouTubeLiveChatService youTubeLiveChatService)
         {
-            eventSubService.NotificationReceived += OnNotificationReceived;
+            twitchEventSubService.NotificationReceived += this.OnNotificationReceived;
+            youTubeLiveChatService.NotificationReceived += this.OnNotificationReceived;
         }
 
-        private void OnNotificationReceived(object sender, OverlayNotification notification)
+        public void ShowPreviewNotification(OverlayNotification notification)
         {
-            if (!ShouldShow(notification.Type))
+            if (notification == null)
+            {
                 return;
+            }
 
             Application.Current.Dispatcher.Invoke(() =>
             {
                 try
                 {
-                    ShowToast(notification);
+                    this.ShowToast(notification);
+                }
+                catch (Exception ex)
+                {
+                    LogService.Error("プレビュー通知の表示中にエラーが発生しました", ex);
+                }
+            });
+        }
+
+        private void OnNotificationReceived(object sender, OverlayNotification notification)
+        {
+            if (!this.ShouldShow(notification))
+            {
+                return;
+            }
+
+            try
+            {
+                this._notificationSoundService.PlayNotificationSound(notification);
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("通知音の再生中にエラーが発生しました", ex);
+            }
+
+            Application.Current.Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    this.ShowToast(notification);
                 }
                 catch (Exception ex)
                 {
@@ -75,16 +109,18 @@ namespace TwitchChatOverlay.Services
             });
         }
 
-        private bool ShouldShow(NotificationType type)
+        private bool ShouldShow(OverlayNotification notification)
         {
-            var settings = _settingsService.LoadSettings();
-            return type switch
+            var settings = this._settingsService.LoadSettings();
+            var isYouTube = string.Equals(notification.SourcePlatform, "YouTube", StringComparison.OrdinalIgnoreCase);
+
+            return notification.Type switch
             {
-                NotificationType.Chat => true,
-                NotificationType.Reward => settings.ShowReward,
+                NotificationType.Chat => !isYouTube || settings.ShowYouTubeChat,
+                NotificationType.Reward => isYouTube ? settings.ShowYouTubeSuperChat : settings.ShowReward,
                 NotificationType.Raid => settings.ShowRaid,
                 NotificationType.Follow => settings.ShowFollow,
-                NotificationType.Subscribe => settings.ShowSubscribe,
+                NotificationType.Subscribe => isYouTube ? settings.ShowYouTubeMembership : settings.ShowSubscribe,
                 NotificationType.GiftSubscribe => settings.ShowGiftSubscribe,
                 NotificationType.Resub => settings.ShowResub,
                 NotificationType.HypeTrainBegin => settings.ShowHypeTrainBegin,
@@ -95,35 +131,37 @@ namespace TwitchChatOverlay.Services
 
         private void ShowToast(OverlayNotification notification)
         {
-            var settings = _settingsService.LoadSettings();
-            int maxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
-            int durationMs = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds * 1000 : 5000;
+            var settings = this._settingsService.LoadSettings();
+            var maxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
+            var durationMs = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds * 1000 : 5000;
 
-            if (_activeToasts.Count >= maxCount)
+            if (this._activeToasts.Count >= maxCount)
+            {
                 return;
+            }
 
-            double fontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
-            double toastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
-            double bgOpacity = Math.Clamp(settings.ToastBackgroundOpacity, 0.0, 1.0);
-            string fontFamily = settings.ToastFontFamily ?? "";
+            var fontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
+            var toastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
+            var bgOpacity = Math.Clamp(settings.ToastBackgroundOpacity, 0.0, 1.0);
+            var fontFamily = settings.ToastFontFamily ?? "";
             var bgMode = settings.ToastBackgroundMode;
-            string customBgColor = settings.ToastCustomBackgroundColor ?? "#1A1A2E";
+            var customBgColor = settings.ToastCustomBackgroundColor ?? "#1A1A2E";
             var fontColorMode = settings.ToastFontColorMode;
-            string customFontColor = settings.ToastCustomFontColor ?? "#FFFFFF";
+            var customFontColor = settings.ToastCustomFontColor ?? "#FFFFFF";
             // 初期位置は (0,0) — ReorderToasts で正しい位置を設定する
             var toast = new ToastNotificationWindow(
                 notification, 0, 0, fontSize, bgOpacity, toastWidth, fontFamily, bgMode, customBgColor, fontColorMode, customFontColor);
 
-            _activeToasts.Add(toast);
-            ReorderToasts(); // ActualHeight が確定する前の暫定配置
+            this._activeToasts.Add(toast);
+            this.ReorderToasts(); // ActualHeight が確定する前の暫定配置
 
             // レンダリング完了後に実際の高さで再整列（特に下揃えの場合に重要）
-            toast.ContentRendered += (s, e) => ReorderToasts();
+            toast.ContentRendered += (s, e) => this.ReorderToasts();
 
             toast.Closed += (s, e) =>
             {
-                _activeToasts.Remove(toast);
-                ReorderToasts();
+                _ = this._activeToasts.Remove(toast);
+                this.ReorderToasts();
             };
 
             toast.ShowAndAutoClose(durationMs);
@@ -131,38 +169,41 @@ namespace TwitchChatOverlay.Services
 
         private void ReorderToasts()
         {
-            if (_activeToasts.Count == 0) return;
+            if (this._activeToasts.Count == 0)
+            {
+                return;
+            }
 
-            var settings = _settingsService.LoadSettings();
+            var settings = this._settingsService.LoadSettings();
             var pos = settings.ToastPosition;
-            var (sl, st, sr, sb) = GetScreenBounds(settings.ToastMonitorIndex);
-            double toastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
+            var (sl, st, sr, sb) = this.GetScreenBounds(settings.ToastMonitorIndex);
+            var toastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
 
-            bool isLeft = pos == ToastPosition.TopLeft || pos == ToastPosition.BottomLeft;
-            bool isTop  = pos == ToastPosition.TopLeft || pos == ToastPosition.TopRight;
+            var isLeft = pos == ToastPosition.TopLeft || pos == ToastPosition.BottomLeft;
+            var isTop = pos == ToastPosition.TopLeft || pos == ToastPosition.TopRight;
 
-            double left = isLeft ? sl + ScreenMargin : sr - toastWidth - ScreenMargin;
+            var left = isLeft ? sl + ScreenMargin : sr - toastWidth - ScreenMargin;
 
             if (isTop)
             {
-                double y = st + ScreenMargin;
-                foreach (var t in _activeToasts)
+                var y = st + ScreenMargin;
+                foreach (var t in this._activeToasts)
                 {
                     t.Left = left;
-                    t.Top  = y;
-                    double h = t.ActualHeight > 0 ? t.ActualHeight : ToastHeight;
+                    t.Top = y;
+                    var h = t.ActualHeight > 0 ? t.ActualHeight : ToastHeight;
                     y += h + ToastMargin;
                 }
             }
             else
             {
-                double y = sb - ScreenMargin;
-                foreach (var t in _activeToasts)
+                var y = sb - ScreenMargin;
+                foreach (var t in this._activeToasts)
                 {
-                    double h = t.ActualHeight > 0 ? t.ActualHeight : ToastHeight;
+                    var h = t.ActualHeight > 0 ? t.ActualHeight : ToastHeight;
                     y -= h;
                     t.Left = left;
-                    t.Top  = y;
+                    t.Top = y;
                     y -= ToastMargin;
                 }
             }

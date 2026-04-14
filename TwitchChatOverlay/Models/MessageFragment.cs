@@ -15,12 +15,12 @@ namespace TwitchChatOverlay.Models
     public class StaticEmoteFragment : EmoteFragment
     {
         public override string EmoteUrl =>
-            $"https://static-cdn.jtvnw.net/emoticons/v2/{EmoteId}/default/dark/2.0";
+            $"https://static-cdn.jtvnw.net/emoticons/v2/{this.EmoteId}/default/dark/2.0";
     }
 
     public class AnimatedEmoteFragment : EmoteFragment
     {
         public override string EmoteUrl =>
-            $"https://static-cdn.jtvnw.net/emoticons/v2/{EmoteId}/animated/dark/1.0";
+            $"https://static-cdn.jtvnw.net/emoticons/v2/{this.EmoteId}/animated/dark/1.0";
     }
 }

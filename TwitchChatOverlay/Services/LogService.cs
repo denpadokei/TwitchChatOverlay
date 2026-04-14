@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -12,10 +11,10 @@ namespace TwitchChatOverlay.Services
     /// <summary>ログの重要度レベル</summary>
     public enum LogLevel
     {
-        Debug   = 0,
-        Info    = 1,
+        Debug = 0,
+        Info = 1,
         Warning = 2,
-        Error   = 3,
+        Error = 3,
     }
 
     /// <summary>
@@ -26,7 +25,6 @@ namespace TwitchChatOverlay.Services
     {
         // --- 設定 ---
         private static string _logDirectory;
-        private static LogLevel _minLevel = LogLevel.Debug;
 
         // --- 内部状態 ---
         private static readonly ConcurrentQueue<string> _queue = new();
@@ -38,18 +36,14 @@ namespace TwitchChatOverlay.Services
 
         // Flush 同期用カウンタ: エンキュー済み件数と書き込み完了件数を追跡する
         private static long _enqueueCount = 0;
-        private static long _writeCount   = 0;
+        private static long _writeCount = 0;
 
         // ---------------------------------------------------------------
         // 公開プロパティ
         // ---------------------------------------------------------------
 
         /// <summary>出力する最低ログレベル（デフォルト: Debug）</summary>
-        public static LogLevel MinLevel
-        {
-            get => _minLevel;
-            set => _minLevel = value;
-        }
+        public static LogLevel MinLevel { get; set; } = LogLevel.Debug;
 
         // ---------------------------------------------------------------
         // 初期化 / シャットダウン
@@ -65,16 +59,19 @@ namespace TwitchChatOverlay.Services
         {
             lock (_initLock)
             {
-                if (_initialized) return;
+                if (_initialized)
+                {
+                    return;
+                }
 
                 if (logDirectory == null)
                 {
-                    string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                    var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
                     logDirectory = Path.Combine(appData, "TwitchChatOverlay", "logs");
                 }
 
                 _logDirectory = logDirectory;
-                Directory.CreateDirectory(_logDirectory);
+                _ = Directory.CreateDirectory(_logDirectory);
 
                 _cts = new CancellationTokenSource();
                 _writerTask = Task.Run(() => WriteLoopAsync(_cts.Token));
@@ -92,11 +89,15 @@ namespace TwitchChatOverlay.Services
         /// </summary>
         public static void Shutdown()
         {
-            if (!_initialized) return;
+            if (!_initialized)
+            {
+                return;
+            }
+
             Info("TwitchChatOverlay 終了。");
             _cts?.Cancel();
             Flush();
-            _writerTask?.Wait(TimeSpan.FromSeconds(5));
+            _ = (_writerTask?.Wait(TimeSpan.FromSeconds(5)));
         }
 
         /// <summary>
@@ -108,10 +109,12 @@ namespace TwitchChatOverlay.Services
         {
             // Flush() 呼び出し時点のエンキュー済み件数を取得する。
             // この時点以前にキューに積まれたすべてのエントリが書き出されるまで待つ。
-            long target = Interlocked.Read(ref _enqueueCount);
+            var target = Interlocked.Read(ref _enqueueCount);
             var timeout = DateTime.Now.AddSeconds(5);
             while (Interlocked.Read(ref _writeCount) < target && DateTime.Now < timeout)
+            {
                 Thread.Sleep(10);
+            }
         }
 
         // ---------------------------------------------------------------
@@ -122,37 +125,45 @@ namespace TwitchChatOverlay.Services
         public static void Debug(
             string message,
             Exception ex = null,
-            [CallerFilePath]   string filePath  = "",
-            [CallerLineNumber] int    lineNumber = 0,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
             [CallerMemberName] string memberName = "")
-            => Enqueue(LogLevel.Debug, message, ex, filePath, lineNumber, memberName);
+        {
+            Enqueue(LogLevel.Debug, message, ex, filePath, lineNumber, memberName);
+        }
 
         /// <summary>INFO レベルでログを記録します。</summary>
         public static void Info(
             string message,
             Exception ex = null,
-            [CallerFilePath]   string filePath  = "",
-            [CallerLineNumber] int    lineNumber = 0,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
             [CallerMemberName] string memberName = "")
-            => Enqueue(LogLevel.Info, message, ex, filePath, lineNumber, memberName);
+        {
+            Enqueue(LogLevel.Info, message, ex, filePath, lineNumber, memberName);
+        }
 
         /// <summary>WARNING レベルでログを記録します。</summary>
         public static void Warning(
             string message,
             Exception ex = null,
-            [CallerFilePath]   string filePath  = "",
-            [CallerLineNumber] int    lineNumber = 0,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
             [CallerMemberName] string memberName = "")
-            => Enqueue(LogLevel.Warning, message, ex, filePath, lineNumber, memberName);
+        {
+            Enqueue(LogLevel.Warning, message, ex, filePath, lineNumber, memberName);
+        }
 
         /// <summary>ERROR レベルでログを記録します。</summary>
         public static void Error(
             string message,
             Exception ex = null,
-            [CallerFilePath]   string filePath  = "",
-            [CallerLineNumber] int    lineNumber = 0,
+            [CallerFilePath] string filePath = "",
+            [CallerLineNumber] int lineNumber = 0,
             [CallerMemberName] string memberName = "")
-            => Enqueue(LogLevel.Error, message, ex, filePath, lineNumber, memberName);
+        {
+            Enqueue(LogLevel.Error, message, ex, filePath, lineNumber, memberName);
+        }
 
         // ---------------------------------------------------------------
         // 内部実装
@@ -162,16 +173,19 @@ namespace TwitchChatOverlay.Services
             LogLevel level, string message, Exception ex,
             string filePath, int lineNumber, string memberName)
         {
-            if (level < _minLevel || !_initialized) return;
-
-            string fileName = Path.GetFileName(filePath);
-            string levelTag = level switch
+            if (level < MinLevel || !_initialized)
             {
-                LogLevel.Debug   => "DEBUG",
-                LogLevel.Info    => "INFO ",
+                return;
+            }
+
+            var fileName = Path.GetFileName(filePath);
+            var levelTag = level switch
+            {
+                LogLevel.Debug => "DEBUG",
+                LogLevel.Info => "INFO ",
                 LogLevel.Warning => "WARN ",
-                LogLevel.Error   => "ERROR",
-                _                => "     ",
+                LogLevel.Error => "ERROR",
+                _ => "     ",
             };
 
             var sb = new StringBuilder();
@@ -194,9 +208,9 @@ namespace TwitchChatOverlay.Services
                 {
                     sb.AppendLine();
                     sb.Append("  StackTrace:");
-                    foreach (string line in ex.StackTrace.Split('\n'))
+                    foreach (var line in ex.StackTrace.Split('\n'))
                     {
-                        string trimmed = line.TrimEnd();
+                        var trimmed = line.TrimEnd();
                         if (!string.IsNullOrEmpty(trimmed))
                         {
                             sb.AppendLine();
@@ -206,14 +220,17 @@ namespace TwitchChatOverlay.Services
                 }
             }
 
-            string logEntry = sb.ToString();
+            var logEntry = sb.ToString();
             _queue.Enqueue(logEntry);
             Interlocked.Increment(ref _enqueueCount);
 #if DEBUG
             System.Diagnostics.Debug.WriteLine(logEntry);
 #endif
 
-            try { _signal.Release(); }
+            try
+            {
+                _signal.Release();
+            }
             catch { /* 無視 */ }
         }
 
@@ -227,7 +244,7 @@ namespace TwitchChatOverlay.Services
                 {
                     try
                     {
-                        await _signal.WaitAsync(TimeSpan.FromMilliseconds(500), ct);
+                        _ = await _signal.WaitAsync(TimeSpan.FromMilliseconds(500), ct);
                     }
                     catch (OperationCanceledException)
                     {
@@ -235,22 +252,27 @@ namespace TwitchChatOverlay.Services
                     }
                 }
 
-                if (_queue.IsEmpty) continue;
+                if (_queue.IsEmpty)
+                {
+                    continue;
+                }
 
-                int batchCount = 0;
+                var batchCount = 0;
                 try
                 {
-                    string logFilePath = GetCurrentLogFilePath();
+                    var logFilePath = GetCurrentLogFilePath();
                     var batchBuilder = new StringBuilder();
 
-                    while (_queue.TryDequeue(out string entry))
+                    while (_queue.TryDequeue(out var entry))
                     {
-                        batchBuilder.AppendLine(entry);
+                        _ = batchBuilder.AppendLine(entry);
                         batchCount++;
                     }
 
                     if (batchBuilder.Length > 0)
+                    {
                         await File.AppendAllTextAsync(logFilePath, batchBuilder.ToString(), Encoding.UTF8);
+                    }
                 }
                 catch
                 {
@@ -262,7 +284,9 @@ namespace TwitchChatOverlay.Services
                     // 書き込みに失敗した場合もエントリはキューから除去されているため、
                     // この更新によって Flush() が不要にタイムアウトするのを防ぐ。
                     if (batchCount > 0)
-                        Interlocked.Add(ref _writeCount, batchCount);
+                    {
+                        _ = Interlocked.Add(ref _writeCount, batchCount);
+                    }
                 }
             }
         }
@@ -270,7 +294,7 @@ namespace TwitchChatOverlay.Services
         /// <summary>本日分のログファイルパスを返します。日付が変わると新ファイルになります。</summary>
         private static string GetCurrentLogFilePath()
         {
-            string date = DateTime.Now.ToString("yyyy-MM-dd");
+            var date = DateTime.Now.ToString("yyyy-MM-dd");
             return Path.Combine(_logDirectory, $"TwitchChatOverlay_{date}.log");
         }
 
@@ -280,10 +304,12 @@ namespace TwitchChatOverlay.Services
             try
             {
                 var cutoff = DateTime.Now.AddDays(-keepDays);
-                foreach (string file in Directory.GetFiles(_logDirectory, "TwitchChatOverlay_*.log"))
+                foreach (var file in Directory.GetFiles(_logDirectory, "TwitchChatOverlay_*.log"))
                 {
                     if (File.GetLastWriteTime(file) < cutoff)
+                    {
                         File.Delete(file);
+                    }
                 }
             }
             catch

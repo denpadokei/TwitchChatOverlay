@@ -1,12 +1,12 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace TwitchChatOverlay.Services
 {
@@ -16,27 +16,15 @@ namespace TwitchChatOverlay.Services
         public string ErrorCode { get; }
         public string ErrorMessage { get; }
 
-        public bool IsInvalidRefreshToken
-        {
-            get
-            {
-                if (StatusCode != (int)HttpStatusCode.BadRequest && StatusCode != (int)HttpStatusCode.Unauthorized)
-                    return false;
-
-                if (ContainsIgnoreCase(ErrorCode, "invalid_grant"))
-                    return true;
-
-                return ContainsIgnoreCase(ErrorMessage, "invalid refresh token")
-                    || ContainsIgnoreCase(ErrorMessage, "invalid_grant");
-            }
-        }
+        public bool IsInvalidRefreshToken => (this.StatusCode == (int)HttpStatusCode.BadRequest || this.StatusCode == (int)HttpStatusCode.Unauthorized) && (ContainsIgnoreCase(this.ErrorCode, "invalid_grant") || ContainsIgnoreCase(this.ErrorMessage, "invalid refresh token")
+                    || ContainsIgnoreCase(this.ErrorMessage, "invalid_grant"));
 
         public TwitchTokenRefreshException(string message, int statusCode, string errorCode, string errorMessage)
             : base(message)
         {
-            StatusCode = statusCode;
-            ErrorCode = errorCode;
-            ErrorMessage = errorMessage;
+            this.StatusCode = statusCode;
+            this.ErrorCode = errorCode;
+            this.ErrorMessage = errorMessage;
         }
 
         private static bool ContainsIgnoreCase(string source, string value)
@@ -77,7 +65,7 @@ namespace TwitchChatOverlay.Services
 
         public TwitchOAuthServer(string clientId)
         {
-            _clientId = clientId;
+            this._clientId = clientId;
         }
 
         /// <summary>
@@ -90,7 +78,7 @@ namespace TwitchChatOverlay.Services
 
             var request = new FormUrlEncodedContent(new[]
             {
-                new KeyValuePair<string, string>("client_id", _clientId),
+                new KeyValuePair<string, string>("client_id", this._clientId),
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
                 new KeyValuePair<string, string>("refresh_token", refreshToken)
             });
@@ -151,8 +139,8 @@ namespace TwitchChatOverlay.Services
             // Step 1: デバイス認可リクエスト
             var deviceRequest = new FormUrlEncodedContent(new[]
             {
-                new KeyValuePair<string, string>("client_id", _clientId),
-                new KeyValuePair<string, string>("scopes", string.Join(" ", _scopes))
+                new KeyValuePair<string, string>("client_id", this._clientId),
+                new KeyValuePair<string, string>("scopes", string.Join(" ", this._scopes))
             });
 
             var deviceResponse = await _http.PostAsync(
@@ -160,19 +148,21 @@ namespace TwitchChatOverlay.Services
 
             var deviceJson = await deviceResponse.Content.ReadAsStringAsync(cancellationToken);
             if (!deviceResponse.IsSuccessStatusCode)
+            {
                 throw new Exception($"デバイス認可リクエスト失敗: {deviceJson}");
+            }
 
             var deviceData = JObject.Parse(deviceJson);
-            string deviceCode = deviceData["device_code"]?.Value<string>()
+            var deviceCode = deviceData["device_code"]?.Value<string>()
                 ?? throw new Exception("device_code が取得できませんでした");
-            string userCode = deviceData["user_code"]?.Value<string>() ?? "";
-            string verificationUri = deviceData["verification_uri"]?.Value<string>()
+            var userCode = deviceData["user_code"]?.Value<string>() ?? "";
+            var verificationUri = deviceData["verification_uri"]?.Value<string>()
                 ?? "https://www.twitch.tv/activate";
             // 完全なURIがあればそちらを使う（コードが自動入力される）
-            string verificationUriComplete = deviceData["verification_uri_complete"]?.Value<string>()
+            var verificationUriComplete = deviceData["verification_uri_complete"]?.Value<string>()
                 ?? verificationUri;
-            int interval = deviceData["interval"]?.Value<int>() ?? 5;
-            int expiresIn = deviceData["expires_in"]?.Value<int>() ?? 1800;
+            var interval = deviceData["interval"]?.Value<int>() ?? 5;
+            var expiresIn = deviceData["expires_in"]?.Value<int>() ?? 1800;
 
             // UIにコードを通知
             onUserCode(userCode, verificationUri);
@@ -180,13 +170,16 @@ namespace TwitchChatOverlay.Services
             // ブラウザを開く
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = verificationUriComplete,
                     UseShellExecute = true
                 });
             }
-            catch (Exception ex) { LogService.Warning("ブラウザを開けませんでした（継続）", ex); }
+            catch (Exception ex)
+            {
+                LogService.Warning("ブラウザを開けませんでした（継続）", ex);
+            }
 
             // Step 2: トークンが発行されるまでポーリング
             var deadline = DateTime.UtcNow.AddSeconds(expiresIn);
@@ -196,7 +189,7 @@ namespace TwitchChatOverlay.Services
 
                 var pollRequest = new FormUrlEncodedContent(new[]
                 {
-                    new KeyValuePair<string, string>("client_id", _clientId),
+                    new KeyValuePair<string, string>("client_id", this._clientId),
                     new KeyValuePair<string, string>("device_code", deviceCode),
                     new KeyValuePair<string, string>("grant_type",
                         "urn:ietf:params:oauth:grant-type:device_code")
@@ -207,10 +200,12 @@ namespace TwitchChatOverlay.Services
                 var pollJson = await pollResponse.Content.ReadAsStringAsync(cancellationToken);
 
                 if (pollResponse.IsSuccessStatusCode)
+                {
                     return JsonConvert.DeserializeObject<DeviceTokenResponse>(pollJson);
+                }
 
                 var errData = JObject.Parse(pollJson);
-                string msg = errData["message"]?.Value<string>()
+                var msg = errData["message"]?.Value<string>()
                     ?? errData["error"]?.Value<string>() ?? "";
 
                 switch (msg)

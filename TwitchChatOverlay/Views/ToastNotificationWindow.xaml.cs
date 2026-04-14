@@ -34,29 +34,29 @@ namespace TwitchChatOverlay.Views
             Services.ToastFontColorMode fontColorMode = Services.ToastFontColorMode.Auto,
             string customFontColor = "#FFFFFF")
         {
-            InitializeComponent();
-            DataContext = new ViewModels.ToastNotificationViewModel(
+            this.InitializeComponent();
+            this.DataContext = new ViewModels.ToastNotificationViewModel(
                 notification, fontSize, backgroundOpacity, fontFamily,
                 bgMode, customBgColor, fontColorMode, customFontColor);
 
-            Width = windowWidth;
-            Left = left;
-            Top = top;
+            this.Width = windowWidth;
+            this.Left = left;
+            this.Top = top;
         }
 
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
             var hwnd = new WindowInteropHelper(this).Handle;
-            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE);
+            var exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            _ = SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE);
         }
 
         public async void ShowAndAutoClose(int durationMs)
         {
-            Show();
+            this.Show();
             await Task.Delay(durationMs);
-            FadeOutAndClose();
+            this.FadeOutAndClose();
         }
 
         private void FadeOutAndClose()
@@ -67,7 +67,7 @@ namespace TwitchChatOverlay.Views
                 To = 0.0,
                 Duration = new Duration(TimeSpan.FromMilliseconds(500))
             };
-            animation.Completed += (s, e) => Close();
+            animation.Completed += (s, e) => this.Close();
 
             var storyboard = new Storyboard();
             Storyboard.SetTarget(animation, this);

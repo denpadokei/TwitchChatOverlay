@@ -6,14 +6,15 @@ namespace TwitchChatOverlay.Views
     {
         public MainWindow()
         {
-            InitializeComponent();
+            this.InitializeComponent();
+
             Closed += (s, e) =>
             {
-                var vm = DataContext as ViewModels.MainWindowViewModel;
+                var vm = this.DataContext as ViewModels.MainWindowViewModel;
                 vm?.DisconnectCommand?.Execute(null);
+                vm?.DisconnectYouTubeCommand?.Execute(null);
             };
         }
     }
 }
-
 

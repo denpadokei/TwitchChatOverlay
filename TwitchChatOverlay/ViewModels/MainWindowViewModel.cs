@@ -1,10 +1,15 @@
-﻿using System;
-using System.Collections.ObjectModel;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Input;
+﻿using Microsoft.Win32;
 using Prism.Commands;
 using Prism.Mvvm;
+using System;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Input;
+using TwitchChatOverlay.Models;
 using TwitchChatOverlay.Services;
 using WinForms = System.Windows.Forms;
 
@@ -12,72 +17,46 @@ namespace TwitchChatOverlay.ViewModels
 {
     public class MainWindowViewModel : BindableBase
     {
-        private string _title = "Twitch Chat Overlay";
-        private string _channelName;
-        private string _oauthToken;
-        private string _statusMessage = "未接続";
-        private string _deviceUserCode;
-        private bool _isAuthorizingOAuth;
-        private string _tokenInfo;
-        private bool _hasToken;
+        private const string YouTubeTermsUrl = "https://www.youtube.com/t/terms";
+        private const string GooglePrivacyPolicyUrl = "https://policies.google.com/privacy";
+        private const string GoogleSecurityPermissionsUrl = "https://security.google.com/settings/security/permissions";
+        private const string GitHubDiscussionsUrl = "https://github.com/denpadokei/TwitchChatOverlay/discussions";
 
-        private bool _showReward = true;
-        private bool _showRaid = true;
-        private bool _showFollow = true;
-        private bool _showSubscribe = true;
-        private bool _showGiftSubscribe = true;
-        private bool _showResub = true;
-        private bool _showHypeTrainBegin = true;
-        private bool _showHypeTrainEnd = true;
-        private int _toastDurationSeconds = 5;
-        private int _toastMaxCount = 5;
-        private int _toastPositionIndex = 0;
-        private int _toastMonitorIndex = 0;
-        private double _toastFontSize = 12;
-        private double _toastWidth = 380;
         private double _toastBackgroundOpacity = 0.8;
-        private string _toastFontFamily = "";
-        private int _toastBackgroundModeIndex = 0;
-        private string _toastCustomBackgroundColor = "#1A1A2E";
-        private int _toastFontColorModeIndex = 0;
-        private string _toastCustomFontColor = "#FFFFFF";
 
-        public ObservableCollection<string> MonitorList { get; } = new();
+        public ObservableCollection<string> MonitorList { get; } = [];
+        public ObservableCollection<AudioOutputDeviceOption> AudioOutputDevices { get; } = [];
 
-        public ObservableCollection<string> RecentChannels { get; } = new();
+        public ObservableCollection<string> RecentChannels { get; } = [];
 
-        public bool HasRecentChannels => RecentChannels.Count > 0;
+        public bool HasRecentChannels => this.RecentChannels.Count > 0;
 
-        private bool _isUpdateAvailable;
-        private bool _isUpdating;
-        private int _updateProgressPercent;
-        private string _latestVersion;
         private string _updateDownloadUrl;
         private string _updateChecksumUrl;
         private string _updateReleasePageUrl;
 
         public bool IsUpdateAvailable
         {
-            get => _isUpdateAvailable;
-            set => SetProperty(ref _isUpdateAvailable, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         public bool IsUpdating
         {
-            get => _isUpdating;
-            set => SetProperty(ref _isUpdating, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         public int UpdateProgressPercent
         {
-            get => _updateProgressPercent;
-            set => SetProperty(ref _updateProgressPercent, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         public string LatestVersion
         {
-            get => _latestVersion;
-            set => SetProperty(ref _latestVersion, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         private readonly TwitchApiService _apiService;
@@ -85,216 +64,265 @@ namespace TwitchChatOverlay.ViewModels
         private readonly ToastNotificationService _toastService;
         private readonly SettingsService _settingsService;
         private readonly UpdateService _updateService;
+        private readonly NotificationSoundService _notificationSoundService;
+        private readonly YouTubeOAuthService _youTubeOAuthService;
+        private readonly YouTubeLiveChatService _youTubeLiveChatService;
+        private readonly ObsWebSocketService _obsWebSocketService;
         private Timer _tokenRefreshTimer;
+        private Timer _youtubeTokenRefreshTimer;
+        private Timer _obsReconnectTimer;
+        private int _isHandlingYouTubeConnectionLost;
+        private int _isObsReconnectInProgress;
         private Timer _validateTimer;
+        private bool _obsAutoReconnectEnabled;
         /// <summary>次回タイマー設定用: refresh 直後の expires_in（秒）。0 のときはデフォルト値を使用。</summary>
         private int _nextRefreshExpiresIn;
+        /// <summary>前回 YouTube 接続時の waitForObsSignalBeforePolling オプション。サイレントリフレッシュ再接続に使用。</summary>
+        private bool _lastYouTubeWaitForObsSignal;
 
         public string Title
         {
-            get => _title;
-            set => SetProperty(ref _title, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "Twitch Chat Overlay";
 
         public string ChannelName
         {
-            get => _channelName;
-            set => SetProperty(ref _channelName, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         public string OAuthToken
         {
-            get => _oauthToken;
-            set => SetProperty(ref _oauthToken, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         /// <summary>Device Auth フロー中に表示するユーザーコード</summary>
         public string DeviceUserCode
         {
-            get => _deviceUserCode;
-            set => SetProperty(ref _deviceUserCode, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         public string StatusMessage
         {
-            get => _statusMessage;
-            set => SetProperty(ref _statusMessage, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "未接続";
 
         public bool IsAuthorizingOAuth
         {
-            get => _isAuthorizingOAuth;
-            set => SetProperty(ref _isAuthorizingOAuth, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         /// <summary>保存済みトークンのログイン名と保存日を表示する文字列</summary>
         public string TokenInfo
         {
-            get => _tokenInfo;
+            get;
             set
             {
-                SetProperty(ref _tokenInfo, value);
-                HasToken = !string.IsNullOrEmpty(value);
+                _ = this.SetProperty(ref field, value);
+                this.HasToken = !string.IsNullOrEmpty(value);
             }
         }
 
         /// <summary>有効なトークン情報があるか（UI表示制御用）</summary>
         public bool HasToken
         {
-            get => _hasToken;
-            set => SetProperty(ref _hasToken, value);
+            get;
+            set => this.SetProperty(ref field, value);
         }
 
         public bool ShowReward
         {
-            get => _showReward;
-            set => SetProperty(ref _showReward, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public bool ShowRaid
         {
-            get => _showRaid;
-            set => SetProperty(ref _showRaid, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public bool ShowFollow
         {
-            get => _showFollow;
-            set => SetProperty(ref _showFollow, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public bool ShowSubscribe
         {
-            get => _showSubscribe;
-            set => SetProperty(ref _showSubscribe, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public bool ShowGiftSubscribe
         {
-            get => _showGiftSubscribe;
-            set => SetProperty(ref _showGiftSubscribe, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public bool ShowResub
         {
-            get => _showResub;
-            set => SetProperty(ref _showResub, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public bool ShowHypeTrainBegin
         {
-            get => _showHypeTrainBegin;
-            set => SetProperty(ref _showHypeTrainBegin, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public bool ShowHypeTrainEnd
         {
-            get => _showHypeTrainEnd;
-            set => SetProperty(ref _showHypeTrainEnd, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
 
         public int ToastDurationSeconds
         {
-            get => _toastDurationSeconds;
-            set => SetProperty(ref _toastDurationSeconds, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 5;
 
         public int ToastMaxCount
         {
-            get => _toastMaxCount;
-            set => SetProperty(ref _toastMaxCount, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 5;
 
         public int ToastPositionIndex
         {
-            get => _toastPositionIndex;
-            set => SetProperty(ref _toastPositionIndex, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 0;
 
         public int ToastMonitorIndex
         {
-            get => _toastMonitorIndex;
-            set => SetProperty(ref _toastMonitorIndex, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 0;
 
         public double ToastFontSize
         {
-            get => _toastFontSize;
-            set => SetProperty(ref _toastFontSize, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 12;
 
         public double ToastWidth
         {
-            get => _toastWidth;
-            set => SetProperty(ref _toastWidth, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 380;
 
         public double ToastBackgroundOpacity
         {
-            get => _toastBackgroundOpacity;
+            get => this._toastBackgroundOpacity;
             set
             {
-                SetProperty(ref _toastBackgroundOpacity, value);
-                RaisePropertyChanged(nameof(ToastBackgroundOpacityPercent));
+                _ = this.SetProperty(ref this._toastBackgroundOpacity, value);
+                this.RaisePropertyChanged(nameof(this.ToastBackgroundOpacityPercent));
             }
         }
 
         /// <summary>UI用: 透過率を 0〜100 の整数で表示・入力する。</summary>
         public int ToastBackgroundOpacityPercent
         {
-            get => (int)Math.Round(_toastBackgroundOpacity * 100);
+            get => (int)Math.Round(this._toastBackgroundOpacity * 100);
             set
             {
-                int clamped = Math.Clamp(value, 0, 100);
-                if (SetProperty(ref _toastBackgroundOpacity, clamped / 100.0))
-                    RaisePropertyChanged(nameof(ToastBackgroundOpacity));
+                var clamped = Math.Clamp(value, 0, 100);
+                if (this.SetProperty(ref this._toastBackgroundOpacity, clamped / 100.0))
+                {
+                    this.RaisePropertyChanged(nameof(this.ToastBackgroundOpacity));
+                }
             }
         }
 
         public string ToastFontFamily
         {
-            get => _toastFontFamily;
-            set => SetProperty(ref _toastFontFamily, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "";
 
         public int ToastBackgroundModeIndex
         {
-            get => _toastBackgroundModeIndex;
+            get;
             set
             {
-                SetProperty(ref _toastBackgroundModeIndex, value);
-                RaisePropertyChanged(nameof(IsCustomBackgroundColor));
+                _ = this.SetProperty(ref field, value);
+                this.RaisePropertyChanged(nameof(this.IsCustomBackgroundColor));
             }
-        }
+        } = 0;
 
-        public bool IsCustomBackgroundColor => _toastBackgroundModeIndex == 3;
+        public bool IsCustomBackgroundColor => this.ToastBackgroundModeIndex == 3;
 
         public string ToastCustomBackgroundColor
         {
-            get => _toastCustomBackgroundColor;
-            set => SetProperty(ref _toastCustomBackgroundColor, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "#1A1A2E";
 
         public int ToastFontColorModeIndex
         {
-            get => _toastFontColorModeIndex;
+            get;
             set
             {
-                SetProperty(ref _toastFontColorModeIndex, value);
-                RaisePropertyChanged(nameof(IsCustomFontColor));
+                _ = this.SetProperty(ref field, value);
+                this.RaisePropertyChanged(nameof(this.IsCustomFontColor));
             }
-        }
+        } = 0;
 
-        public bool IsCustomFontColor => _toastFontColorModeIndex == 1;
+        public bool IsCustomFontColor => this.ToastFontColorModeIndex == 1;
 
         public string ToastCustomFontColor
         {
-            get => _toastCustomFontColor;
-            set => SetProperty(ref _toastCustomFontColor, value);
-        }
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "#FFFFFF";
 
-        public System.Collections.Generic.List<string> FontFamilyPresets { get; } = new()
+        public int NotificationSoundSourceModeIndex
         {
+            get;
+            set
+            {
+                _ = this.SetProperty(ref field, value);
+                this.RaisePropertyChanged(nameof(this.IsCustomNotificationSoundFile));
+            }
+        } = 0;
+
+        public bool IsCustomNotificationSoundFile => this.NotificationSoundSourceModeIndex == 1;
+
+        public bool NotificationSoundEnabled
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public string NotificationSoundFilePath
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "";
+
+        public int NotificationSoundVolumePercent
+        {
+            get;
+            set => this.SetProperty(ref field, Math.Clamp(value, 0, 100));
+        } = 100;
+
+        public string NotificationSoundOutputDeviceId
+        {
+            get;
+            set => this.SetProperty(ref field, value ?? "");
+        } = "";
+
+        public System.Collections.Generic.List<string> FontFamilyPresets { get; } =
+        [
             "",
             "Meiryo UI",
             "Yu Gothic UI",
@@ -305,7 +333,7 @@ namespace TwitchChatOverlay.ViewModels
             "Arial",
             "Consolas",
             "Impact",
-        };
+        ];
 
         public ICommand ConnectCommand { get; }
         public ICommand DisconnectCommand { get; }
@@ -314,87 +342,344 @@ namespace TwitchChatOverlay.ViewModels
         public ICommand SelectRecentChannelCommand { get; }
         public ICommand UpdateCommand { get; }
         public ICommand OpenReleasePageCommand { get; }
+        public ICommand BrowseNotificationSoundFileCommand { get; }
+        public ICommand PreviewNotificationSoundCommand { get; }
+        public ICommand PreviewCommonCommentCommand { get; }
+        public ICommand PreviewTwitchCommentCommand { get; }
+        public ICommand PreviewYouTubeCommentCommand { get; }
+        public ICommand AuthorizeYouTubeOAuthCommand { get; }
+        public ICommand ConnectYouTubeCommand { get; }
+        public ICommand DisconnectYouTubeCommand { get; }
+        public ICommand ConnectObsCommand { get; }
+        public ICommand DisconnectObsCommand { get; }
+        public ICommand OpenPrivacyPolicyCommand { get; }
+        public ICommand OpenTermsOfUseCommand { get; }
+        public ICommand OpenYouTubeTermsCommand { get; }
+        public ICommand OpenGooglePrivacyPolicyCommand { get; }
+        public ICommand OpenGooglePermissionsCommand { get; }
+        public ICommand OpenSupportCommand { get; }
+        public ICommand ClearYouTubeAuthorizationCommand { get; }
+        public ICommand RevokeYouTubeAuthorizationCommand { get; }
+
+        public int SelectedTabIndex
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        }
+
+        public bool ShowYouTubeChat
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public bool ShowYouTubeSuperChat
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public bool ShowYouTubeMembership
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public string YouTubeTokenInfo
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "未認可";
+
+        public string YouTubeStatusMessage
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "未接続";
+
+        public bool YouTubeLegalConsentAccepted
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        }
+
+        public int YouTubeMessageCacheSize
+        {
+            get;
+            set
+            {
+                var clamped = Math.Max(value, YouTubeLiveChatService.MinMessageCacheSize);
+
+                if (this.SetProperty(ref field, clamped))
+                {
+                    this._youTubeLiveChatService.MessageCacheSize = clamped;
+                }
+            }
+        } = YouTubeLiveChatService.DefaultMessageCacheSize;
+
+        public bool ObsWebSocketEnabled
+        {
+            get;
+            set
+            {
+                if (this.SetProperty(ref field, value))
+                {
+                    this.UpdateObsStatusMessage();
+                    this.RaiseObsCommandStateChanged();
+                }
+            }
+        }
+
+        public string ObsWebSocketHost
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "127.0.0.1";
+
+        public int ObsWebSocketPort
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 4455;
+
+        public string ObsWebSocketPassword
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "";
+
+        public string ObsStatusMessage
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "OBS連携は無効です";
 
         public MainWindowViewModel(
             SettingsService settingsService,
             TwitchApiService apiService,
             TwitchEventSubService eventSubService,
             ToastNotificationService toastService,
-            UpdateService updateService)
+            UpdateService updateService,
+            NotificationSoundService notificationSoundService,
+            YouTubeOAuthService youTubeOAuthService,
+            YouTubeLiveChatService youTubeLiveChatService,
+            ObsWebSocketService obsWebSocketService)
         {
-            _settingsService = settingsService;
-            _apiService = apiService;
-            _eventSubService = eventSubService;
-            _toastService = toastService;
-            _updateService = updateService;
+            this._settingsService = settingsService;
+            this._apiService = apiService;
+            this._eventSubService = eventSubService;
+            this._toastService = toastService;
+            this._updateService = updateService;
+            this._notificationSoundService = notificationSoundService;
+            this._youTubeOAuthService = youTubeOAuthService;
+            this._youTubeLiveChatService = youTubeLiveChatService;
+            this._obsWebSocketService = obsWebSocketService;
 
-            ConnectCommand = new DelegateCommand(Connect, CanConnect);
-            DisconnectCommand = new DelegateCommand(Disconnect, CanDisconnect);
-            AuthorizeOAuthCommand = new DelegateCommand(AuthorizeOAuth);
-            SaveSettingsCommand = new DelegateCommand(SaveSettings);
-            SelectRecentChannelCommand = new DelegateCommand<string>(ch => ChannelName = ch);
-            UpdateCommand = new DelegateCommand(ExecuteUpdate, () => IsUpdateAvailable && !IsUpdating)
-                .ObservesProperty(() => IsUpdateAvailable)
-                .ObservesProperty(() => IsUpdating);
-            OpenReleasePageCommand = new DelegateCommand(
-                () => _updateService.OpenReleasePage(_updateReleasePageUrl),
-                () => !string.IsNullOrEmpty(_updateReleasePageUrl))
-                .ObservesProperty(() => IsUpdateAvailable);
+            this.ConnectCommand = new DelegateCommand(this.Connect, this.CanConnect);
+            this.DisconnectCommand = new DelegateCommand(this.Disconnect, this.CanDisconnect);
+            this.AuthorizeOAuthCommand = new DelegateCommand(this.AuthorizeOAuth);
+            this.SaveSettingsCommand = new DelegateCommand(this.SaveSettings);
+            this.SelectRecentChannelCommand = new DelegateCommand<string>(ch => this.ChannelName = ch);
+            this.UpdateCommand = new DelegateCommand(this.ExecuteUpdate, () => this.IsUpdateAvailable && !this.IsUpdating)
+                .ObservesProperty(() => this.IsUpdateAvailable)
+                .ObservesProperty(() => this.IsUpdating);
+            this.OpenReleasePageCommand = new DelegateCommand(
+                () => this._updateService.OpenReleasePage(this._updateReleasePageUrl),
+                () => !string.IsNullOrEmpty(this._updateReleasePageUrl))
+                .ObservesProperty(() => this.IsUpdateAvailable);
+            this.BrowseNotificationSoundFileCommand = new DelegateCommand(this.BrowseNotificationSoundFile);
+            this.PreviewNotificationSoundCommand = new DelegateCommand(this.PreviewNotificationSound);
+            this.PreviewCommonCommentCommand = new DelegateCommand(this.PreviewCommonComment);
+            this.PreviewTwitchCommentCommand = new DelegateCommand(this.PreviewTwitchComment);
+            this.PreviewYouTubeCommentCommand = new DelegateCommand(this.PreviewYouTubeComment);
+            this.AuthorizeYouTubeOAuthCommand = new DelegateCommand(this.AuthorizeYouTubeOAuth, this.CanAuthorizeYouTubeOAuth)
+                .ObservesProperty(() => this.YouTubeLegalConsentAccepted);
+            this.ConnectYouTubeCommand = new DelegateCommand(this.ConnectYouTube, this.CanConnectYouTube)
+                .ObservesProperty(() => this.YouTubeLegalConsentAccepted);
+            this.DisconnectYouTubeCommand = new DelegateCommand(this.DisconnectYouTube);
+            this.ConnectObsCommand = new DelegateCommand(this.ConnectObs, this.CanConnectObs)
+                .ObservesProperty(() => this.ObsWebSocketEnabled);
+            this.DisconnectObsCommand = new DelegateCommand(this.DisconnectObs, this.CanDisconnectObs)
+                .ObservesProperty(() => this.ObsWebSocketEnabled);
+            this.OpenPrivacyPolicyCommand = new DelegateCommand(this.OpenPrivacyPolicy);
+            this.OpenTermsOfUseCommand = new DelegateCommand(this.OpenTermsOfUse);
+            this.OpenYouTubeTermsCommand = new DelegateCommand(this.OpenYouTubeTerms);
+            this.OpenGooglePrivacyPolicyCommand = new DelegateCommand(this.OpenGooglePrivacyPolicy);
+            this.OpenGooglePermissionsCommand = new DelegateCommand(this.OpenGooglePermissions);
+            this.OpenSupportCommand = new DelegateCommand(this.OpenSupport);
+            this.ClearYouTubeAuthorizationCommand = new DelegateCommand(this.ClearYouTubeAuthorization);
+            this.RevokeYouTubeAuthorizationCommand = new DelegateCommand(this.RevokeYouTubeAuthorization);
 
-            _toastService.Initialize(_eventSubService);
+            this._toastService.Initialize(this._eventSubService, this._youTubeLiveChatService);
 
             // 予期しない切断（トークン期限切れ等）時に自動再接続
-            _eventSubService.ConnectionLost += OnConnectionLost;
+            this._eventSubService.ConnectionLost += this.OnConnectionLost;
+            this._youTubeLiveChatService.ConnectionLost += this.OnYouTubeConnectionLost;
+            this._youTubeLiveChatService.BroadcastDetected += this.OnYouTubeBroadcastDetected;
+            this._youTubeLiveChatService.WaitingForBroadcastStarted += this.OnYouTubeWaitingForBroadcastStarted;
+            this._youTubeLiveChatService.BroadcastEnded += this.OnYouTubeBroadcastEnded;
+            this._obsWebSocketService.ConnectionStateChanged += this.OnObsConnectionStateChanged;
+            this._obsWebSocketService.StreamingStateChanged += this.OnObsStreamingStateChanged;
 
             // モニター一覧を構築
             var screens = WinForms.Screen.AllScreens;
-            for (int i = 0; i < screens.Length; i++)
+            for (var i = 0; i < screens.Length; i++)
             {
                 var s = screens[i];
-                string label = $"モニター {i + 1}{(s.Primary ? " (プライマリ)" : "")} {s.Bounds.Width}x{s.Bounds.Height}";
-                MonitorList.Add(label);
+                var label = $"モニター {i + 1}{(s.Primary ? " (プライマリ)" : "")} {s.Bounds.Width}x{s.Bounds.Height}";
+                this.MonitorList.Add(label);
             }
 
-            LoadSettings();
-            _ = ValidateSavedTokenAsync();
-            _ = CheckForUpdateAsync();
+            this.ReloadAudioOutputDevices();
+
+            this.LoadSettings();
+            _ = this.AutoConnectObsAsync();
+            _ = this.ValidateSavedTokenAsync();
+            _ = this.AutoConnectYouTubeAsync();
+            _ = this.CheckForUpdateAsync();
+        }
+
+        private async Task AutoConnectObsAsync()
+        {
+            if (!this.ObsWebSocketEnabled)
+            {
+                this.StopObsReconnectTimer();
+                this.UpdateObsStatusMessage();
+                return;
+            }
+
+            this._obsAutoReconnectEnabled = true;
+            await this.TryConnectObsAsync(isAutomatic: true, statusPrefix: "起動時に OBS へ接続中...");
+        }
+
+        private async Task AutoConnectYouTubeAsync()
+        {
+            var settings = this._settingsService.LoadSettings();
+
+            if (!settings.YouTubeLegalConsentAccepted)
+            {
+                if (!string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+                {
+                    this.YouTubeStatusMessage = "YouTube の利用条件への同意が未完了のため、自動接続を停止しています";
+                }
+
+                return;
+            }
+
+            if (!settings.YouTubeAutoConnectEnabled)
+            {
+                this.YouTubeStatusMessage = "未接続";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+            {
+                if (!string.IsNullOrEmpty(settings.YouTubeTokenInfo))
+                {
+                    this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                }
+
+                this.YouTubeStatusMessage = "未接続";
+                return;
+            }
+
+            try
+            {
+                this.YouTubeStatusMessage = "YouTube自動接続中...";
+                var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
+                var waitForObsSignal = UseObsForDetection;
+                this._lastYouTubeWaitForObsSignal = waitForObsSignal;
+                await this._youTubeLiveChatService.ConnectAsync(
+                    settings.YouTubeOAuthToken,
+                    checkImmediately: !waitForObsSignal,
+                    waitForObsSignalBeforePolling: waitForObsSignal);
+                this.YouTubeStatusMessage = this._youTubeLiveChatService.IsWaitingForBroadcast
+                    ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                    : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
+                this.UpdateYouTubeTokenRefreshTimerState();
+
+                settings.YouTubeAutoConnectEnabled = true;
+                this._settingsService.SaveSettings(settings);
+            }
+            catch
+            {
+                if (string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
+                {
+                    this.YouTubeStatusMessage = "YouTube自動接続に失敗しました（再認可してください）";
+                    return;
+                }
+
+                try
+                {
+                    var refreshed = await this._youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                    settings.YouTubeOAuthToken = refreshed.AccessToken;
+                    settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                    settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                    this._settingsService.SaveSettings(settings);
+
+                    this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                    var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
+                    var waitForObsSignal = UseObsForDetection;
+                    this._lastYouTubeWaitForObsSignal = waitForObsSignal;
+                    await this._youTubeLiveChatService.ConnectAsync(
+                        settings.YouTubeOAuthToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
+                    this.YouTubeStatusMessage = this._youTubeLiveChatService.IsWaitingForBroadcast
+                        ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                        : BuildYouTubeConnectedMessage("✅ YouTube自動接続完了");
+                    this.UpdateYouTubeTokenRefreshTimerState();
+
+                    settings.YouTubeAutoConnectEnabled = true;
+                    this._settingsService.SaveSettings(settings);
+                }
+                catch (Exception ex)
+                {
+                    LogService.Warning("YouTube自動接続に失敗しました", ex);
+                    this.YouTubeStatusMessage = "YouTube自動接続に失敗しました（手動接続してください）";
+                }
+            }
         }
 
         private async Task AutoConnectAsync()
         {
-            if (string.IsNullOrWhiteSpace(ChannelName) ||
-                string.IsNullOrWhiteSpace(OAuthToken))
+            if (string.IsNullOrWhiteSpace(this.ChannelName) ||
+                string.IsNullOrWhiteSpace(this.OAuthToken))
+            {
                 return;
+            }
 
             try
             {
-                StatusMessage = "自動接続中...";
-                var settings = _settingsService.LoadSettings();
-                string broadcasterUserId = settings.BroadcasterUserId;
-                string userId = settings.UserId;
+                this.StatusMessage = "自動接続中...";
+                var settings = this._settingsService.LoadSettings();
+                var broadcasterUserId = settings.BroadcasterUserId;
+                var userId = settings.UserId;
 
                 if (string.IsNullOrEmpty(broadcasterUserId) || string.IsNullOrEmpty(userId))
+                {
                     return;
+                }
 
-                await _eventSubService.ConnectAsync(OAuthToken, BuildSecrets.ClientId, broadcasterUserId, userId);
-                LogService.Info($"EventSub自動接続完了: {ChannelName}");
-                StatusMessage = $"✅ 接続完了 ({ChannelName})"; 
-                StartTokenRefreshTimer();
-                StartValidateTimer();
-                ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
-                ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+                await this._eventSubService.ConnectAsync(this.OAuthToken, BuildSecrets.ClientId, broadcasterUserId, userId);
+                LogService.Info($"EventSub自動接続完了: {this.ChannelName}");
+                this.StatusMessage = $"✅ 接続完了 ({this.ChannelName})";
+                this.StartTokenRefreshTimer();
+                this.StartValidateTimer();
+                ((DelegateCommand)this.ConnectCommand).RaiseCanExecuteChanged();
+                ((DelegateCommand)this.DisconnectCommand).RaiseCanExecuteChanged();
             }
             catch (Exception ex)
             {
                 LogService.Error("自動接続エラー", ex);
-                StatusMessage = $"自動接続エラー: {ex.Message}";
+                this.StatusMessage = $"自動接続エラー: {ex.Message}";
             }
         }
 
         /// <summary>接続完了後にトークンリフレッシュタイマーを開始する。expires_in が既知の場合はそれに基づいて間隔を決定する。</summary>
         private void StartTokenRefreshTimer()
         {
-            _tokenRefreshTimer?.Dispose();
+            this._tokenRefreshTimer?.Dispose();
 #if DEBUG
             // デバッグ時は5分ごとにリフレッシュ（Twitch APIレート制限内で動作確認用）
             var interval = TimeSpan.FromMinutes(5);
@@ -418,8 +703,8 @@ namespace TwitchChatOverlay.ViewModels
             }
             _nextRefreshExpiresIn = 0;
 #endif
-            _tokenRefreshTimer = new Timer(
-                _ => _ = RefreshTokenSilentlyAsync(),
+            this._tokenRefreshTimer = new Timer(
+                _ => _ = this.RefreshTokenSilentlyAsync(),
                 null,
                 interval,
                 interval);
@@ -427,21 +712,134 @@ namespace TwitchChatOverlay.ViewModels
 
         private void StopTokenRefreshTimer()
         {
-            _tokenRefreshTimer?.Dispose();
-            _tokenRefreshTimer = null;
+            this._tokenRefreshTimer?.Dispose();
+            this._tokenRefreshTimer = null;
+        }
+
+        /// <summary>YouTube接続完了後に50分ごとのトークン予防的リフレッシュタイマーを開始する。</summary>
+        private void StartYouTubeTokenRefreshTimer()
+        {
+            this._youtubeTokenRefreshTimer?.Dispose();
+#if DEBUG
+            // デバッグ時は3分ごとにリフレッシュ（動作確認用）
+            var interval = TimeSpan.FromMinutes(3);
+#else
+            // 50分ごとに実行（YouTube アクセストークンは約3600秒（1時間）で期限切れ）
+            var interval = TimeSpan.FromMinutes(50);
+#endif
+            this._youtubeTokenRefreshTimer = new Timer(
+                _ => _ = this.RefreshYouTubeTokenSilentlyAsync(),
+                null,
+                interval,
+                interval);
+        }
+
+        private void StopYouTubeTokenRefreshTimer()
+        {
+            this._youtubeTokenRefreshTimer?.Dispose();
+            this._youtubeTokenRefreshTimer = null;
+        }
+
+        private void StartObsReconnectTimer()
+        {
+            if (!this._obsAutoReconnectEnabled || !this.ObsWebSocketEnabled || this._obsWebSocketService.IsConnected)
+            {
+                return;
+            }
+
+            if (this._obsReconnectTimer != null)
+            {
+                return;
+            }
+
+            var interval = TimeSpan.FromSeconds(10);
+            this._obsReconnectTimer = new Timer(
+                _ => _ = this.TryConnectObsAsync(isAutomatic: true, statusPrefix: "OBS が見つからないため再接続中..."),
+                null,
+                interval,
+                interval);
+        }
+
+        private void StopObsReconnectTimer()
+        {
+            this._obsReconnectTimer?.Dispose();
+            this._obsReconnectTimer = null;
+        }
+
+        private void UpdateYouTubeTokenRefreshTimerState()
+        {
+            if (this._youTubeLiveChatService.IsWaitingForBroadcast)
+            {
+                this.StopYouTubeTokenRefreshTimer();
+                return;
+            }
+
+            if (this._youTubeLiveChatService.IsConnected)
+            {
+                this.StartYouTubeTokenRefreshTimer();
+            }
+        }
+
+        /// <summary>バックグラウンドでYouTubeトークンをリフレッシュし、接続中なら再接続する。</summary>
+        private async Task RefreshYouTubeTokenSilentlyAsync()
+        {
+            var settings = this._settingsService.LoadSettings();
+            if (string.IsNullOrEmpty(settings.YouTubeRefreshToken))
+            {
+                LogService.Debug("[YouTube SilentRefresh] リフレッシュトークンがないためスキップ");
+                return;
+            }
+
+            try
+            {
+                LogService.Debug("[YouTube SilentRefresh] バックグラウンド更新を開始");
+                var refreshed = await this._youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                settings.YouTubeOAuthToken = refreshed.AccessToken;
+                settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                this._settingsService.SaveSettings(settings);
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher != null)
+                {
+                    _ = await dispatcher.InvokeAsync(() => this.YouTubeTokenInfo = settings.YouTubeTokenInfo);
+                }
+                else
+                {
+                    this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                }
+
+                LogService.Debug($"[YouTube SilentRefresh] トークン更新成功");
+
+                // 接続中の場合は前回と同じ接続オプションで再接続
+                if (this._youTubeLiveChatService.IsConnected || this._youTubeLiveChatService.IsWaitingForBroadcast)
+                {
+                    var waitForObsSignal = this._lastYouTubeWaitForObsSignal;
+                    LogService.Debug("[YouTube SilentRefresh] 接続中のため新トークンで再接続");
+                    await this._youTubeLiveChatService.ReconnectAsync(
+                        refreshed.AccessToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
+                    this.UpdateYouTubeTokenRefreshTimerState();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogService.Warning("[YouTube SilentRefresh] バックグラウンド更新に失敗", ex);
+            }
         }
 
         /// <summary>毎時トークン検証タイマーを開始する。</summary>
         private void StartValidateTimer()
         {
-            _validateTimer?.Dispose();
+            this._validateTimer?.Dispose();
 #if DEBUG
             var interval = TimeSpan.FromMinutes(2);
 #else
             var interval = TimeSpan.FromHours(1);
 #endif
-            _validateTimer = new Timer(
-                _ => _ = ValidateTokenPeriodicallyAsync(),
+            this._validateTimer = new Timer(
+                _ => _ = this.ValidateTokenPeriodicallyAsync(),
                 null,
                 interval,
                 interval);
@@ -450,22 +848,24 @@ namespace TwitchChatOverlay.ViewModels
 
         private void StopValidateTimer()
         {
-            _validateTimer?.Dispose();
-            _validateTimer = null;
+            this._validateTimer?.Dispose();
+            this._validateTimer = null;
         }
 
         /// <summary>定期 validate。トークンが無効になっていれば切断して再認可を促す。</summary>
         private async Task ValidateTokenPeriodicallyAsync()
         {
             // 開始時点のトークンをキャプチャして、その値に対してのみ validate を行う
-            var tokenAtStart = OAuthToken;
+            var tokenAtStart = this.OAuthToken;
             if (string.IsNullOrEmpty(tokenAtStart))
+            {
                 return;
+            }
 
             LogService.Debug("[ValidateTimer] 定期トークン検証を開始");
             try
             {
-                var (isValid, _, _, expiresIn) = await _apiService.ValidateTokenAsync(tokenAtStart);
+                var (isValid, _, _, expiresIn) = await this._apiService.ValidateTokenAsync(tokenAtStart);
                 if (isValid)
                 {
                     LogService.Debug($"[ValidateTimer] トークン有効 expires_in={expiresIn}s (期限: {DateTime.Now.AddSeconds(expiresIn):yyyy/MM/dd HH:mm:ss})");
@@ -473,7 +873,7 @@ namespace TwitchChatOverlay.ViewModels
                 }
 
                 // validate 中にトークンが更新されていないか確認し、stale 結果であれば無視する
-                if (!string.Equals(OAuthToken, tokenAtStart, StringComparison.Ordinal))
+                if (!string.Equals(this.OAuthToken, tokenAtStart, StringComparison.Ordinal))
                 {
                     LogService.Debug("[ValidateTimer] validate 結果は古いトークンに対するもののため、セッション終了をスキップします");
                     return;
@@ -481,15 +881,15 @@ namespace TwitchChatOverlay.ViewModels
 
                 // トークンが無効になっていた場合はセッションを終了する
                 LogService.Warning("[ValidateTimer] トークンが無効になっています。セッションを終了します");
-                StopTokenRefreshTimer();
-                StopValidateTimer();
-                _eventSubService.Disconnect();
+                this.StopTokenRefreshTimer();
+                this.StopValidateTimer();
+                this._eventSubService.Disconnect();
 
-                OAuthToken = "";
-                TokenInfo = "⚠️ トークンが無効になりました。再認可してください";
-                StatusMessage = "⚠️ トークンが無効になりました。再認可してください";
-                ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
-                ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+                this.OAuthToken = "";
+                this.TokenInfo = "⚠️ トークンが無効になりました。再認可してください";
+                this.StatusMessage = "⚠️ トークンが無効になりました。再認可してください";
+                ((DelegateCommand)this.ConnectCommand).RaiseCanExecuteChanged();
+                ((DelegateCommand)this.DisconnectCommand).RaiseCanExecuteChanged();
             }
             catch (Exception ex)
             {
@@ -501,7 +901,7 @@ namespace TwitchChatOverlay.ViewModels
         /// <summary>バックグラウンドでトークンをリフレッシュし、接続中なら再接続する。</summary>
         private async Task RefreshTokenSilentlyAsync()
         {
-            var settings = _settingsService.LoadSettings();
+            var settings = this._settingsService.LoadSettings();
             if (string.IsNullOrEmpty(settings.RefreshToken))
             {
                 LogService.Debug("[SilentRefresh] リフレッシュトークンがないためスキップ");
@@ -514,33 +914,33 @@ namespace TwitchChatOverlay.ViewModels
                 var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
                 var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
-                OAuthToken = newToken.AccessToken;
+                this.OAuthToken = newToken.AccessToken;
                 settings.OAuthToken = newToken.AccessToken;
                 settings.RefreshToken = newToken.RefreshToken;
                 settings.OAuthTokenSavedAt = DateTime.UtcNow;
-                _settingsService.SaveSettings(settings);
+                this._settingsService.SaveSettings(settings);
 
-                string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-                TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                string expiryInfo = newToken.ExpiresIn > 0
+                var savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                this.TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                var expiryInfo = newToken.ExpiresIn > 0
                     ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
                     : "expires_in 不明";
                 LogService.Debug($"[SilentRefresh] 更新成功 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
 
                 // 接続中であればトークンを更新して再接続
-                if (_eventSubService.IsConnected)
+                if (this._eventSubService.IsConnected)
                 {
                     LogService.Debug("[SilentRefresh] 接続中のため再接続を実行");
-                    _eventSubService.Disconnect();
+                    this._eventSubService.Disconnect();
                     await Task.Delay(500);
-                    _nextRefreshExpiresIn = newToken.ExpiresIn;
-                    await AutoConnectAsync();
+                    this._nextRefreshExpiresIn = newToken.ExpiresIn;
+                    await this.AutoConnectAsync();
                     LogService.Debug("[SilentRefresh] 再接続完了");
                 }
             }
             catch (TwitchTokenRefreshException ex) when (ex.IsInvalidRefreshToken)
             {
-                InvalidateTwitchRefreshToken(settings, "SilentRefresh");
+                this.InvalidateTwitchRefreshToken(settings, "SilentRefresh");
                 LogService.Warning("トークンのサイレントリフレッシュに失敗しました（無効なリフレッシュトークン）", ex);
             }
             catch (Exception ex)
@@ -553,79 +953,79 @@ namespace TwitchChatOverlay.ViewModels
         /// <summary>予期しない切断時に呼ばれる。トークンをリフレッシュして再接続を試みる。</summary>
         private async void OnConnectionLost(object sender, EventArgs e)
         {
-            StopTokenRefreshTimer();
-            StopValidateTimer();
-            ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
-            ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+            this.StopTokenRefreshTimer();
+            this.StopValidateTimer();
+            ((DelegateCommand)this.ConnectCommand).RaiseCanExecuteChanged();
+            ((DelegateCommand)this.DisconnectCommand).RaiseCanExecuteChanged();
 
-            var settings = _settingsService.LoadSettings();
+            var settings = this._settingsService.LoadSettings();
             if (string.IsNullOrEmpty(settings.RefreshToken))
             {
-                StatusMessage = "⚠️ 接続が切断されました。再接続するにはOAuth再認可が必要です";
+                this.StatusMessage = "⚠️ 接続が切断されました。再接続するにはOAuth再認可が必要です";
                 return;
             }
 
             try
             {
-                StatusMessage = "🔄 接続が切断されました。トークンを更新して再接続中...";
+                this.StatusMessage = "🔄 接続が切断されました。トークンを更新して再接続中...";
                 LogService.Warning("予期しない切断が発生しました。トークン更新と再接続を試みます");
                 await Task.Delay(2000); // 少し待ってから再接続
 
                 var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
                 var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
-                OAuthToken = newToken.AccessToken;
+                this.OAuthToken = newToken.AccessToken;
                 settings.OAuthToken = newToken.AccessToken;
                 settings.RefreshToken = newToken.RefreshToken;
                 settings.OAuthTokenSavedAt = DateTime.UtcNow;
-                _settingsService.SaveSettings(settings);
+                this._settingsService.SaveSettings(settings);
 
-                string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-                TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                string expiryInfo = newToken.ExpiresIn > 0
+                var savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                this.TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                var expiryInfo = newToken.ExpiresIn > 0
                     ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
                     : "expires_in 不明";
                 LogService.Debug($"[OnConnectionLost] トークン更新成功。再接続を開始 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
 
-                _nextRefreshExpiresIn = newToken.ExpiresIn;
-                await AutoConnectAsync();
+                this._nextRefreshExpiresIn = newToken.ExpiresIn;
+                await this.AutoConnectAsync();
             }
             catch (TwitchTokenRefreshException ex) when (ex.IsInvalidRefreshToken)
             {
-                InvalidateTwitchRefreshToken(settings, "OnConnectionLost");
+                this.InvalidateTwitchRefreshToken(settings, "OnConnectionLost");
                 LogService.Error("再接続エラー。無効なリフレッシュトークンのため再認可が必要です", ex);
-                StatusMessage = "⚠️ リフレッシュトークンが無効です。再認可してください";
-                TokenInfo = "⚠️ トークンの更新に失敗しました。再認可してください";
-                OAuthToken = "";
+                this.StatusMessage = "⚠️ リフレッシュトークンが無効です。再認可してください";
+                this.TokenInfo = "⚠️ トークンの更新に失敗しました。再認可してください";
+                this.OAuthToken = "";
             }
             catch (Exception ex)
             {
                 LogService.Error("再接続エラー。再認可が必要です", ex);
-                StatusMessage = $"⚠️ 再接続失敗: {ex.Message}　再認可してください";
-                TokenInfo = "⚠️ トークンの更新に失敗しました。再認可してください";
-                OAuthToken = "";
+                this.StatusMessage = $"⚠️ 再接続失敗: {ex.Message}　再認可してください";
+                this.TokenInfo = "⚠️ トークンの更新に失敗しました。再認可してください";
+                this.OAuthToken = "";
             }
         }
 
         private async Task ValidateSavedTokenAsync()
         {
-            var settings = _settingsService.LoadSettings();
+            var settings = this._settingsService.LoadSettings();
 
             // まず保存済みアクセストークンを検証し、有効ならそのまま接続する
-            if (!string.IsNullOrEmpty(OAuthToken))
+            if (!string.IsNullOrEmpty(this.OAuthToken))
             {
                 try
                 {
                     // 残り600秒（10分）未満なら有効でも先行リフレッシュする
                     const int RefreshThresholdSeconds = 600;
 
-                    var (isValid, login, userId, expiresIn) = await _apiService.ValidateTokenAsync(OAuthToken);
+                    var (isValid, login, userId, expiresIn) = await this._apiService.ValidateTokenAsync(this.OAuthToken);
                     if (isValid && expiresIn >= RefreshThresholdSeconds)
                     {
-                        string savedAt = settings.OAuthTokenSavedAt.HasValue
+                        var savedAt = settings.OAuthTokenSavedAt.HasValue
                             ? settings.OAuthTokenSavedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
                             : "不明";
-                        TokenInfo = $"✅ {login ?? settings.OAuthTokenLogin ?? "(不明)"}  |  取得日: {savedAt}";
+                        this.TokenInfo = $"✅ {login ?? settings.OAuthTokenLogin ?? "(不明)"}  |  取得日: {savedAt}";
                         LogService.Debug($"[Startup] トークン有効 expires_in={expiresIn}s (期限: {DateTime.Now.AddSeconds(expiresIn):yyyy/MM/dd HH:mm:ss})");
 
                         // UserIdが未保存なら補完
@@ -633,20 +1033,24 @@ namespace TwitchChatOverlay.ViewModels
                         {
                             settings.UserId = userId;
                             settings.BroadcasterUserId = userId;
-                            _settingsService.SaveSettings(settings);
+                            this._settingsService.SaveSettings(settings);
                         }
 
-                        _nextRefreshExpiresIn = expiresIn;
-                        await AutoConnectAsync();
+                        this._nextRefreshExpiresIn = expiresIn;
+                        await this.AutoConnectAsync();
                         return;
                     }
 
                     if (isValid)
+                    {
                         LogService.Debug($"[Startup] アクセストークンの残り有効期限が {expiresIn} 秒のため先行リフレッシュします");
+                    }
                     else
+                    {
                         LogService.Debug("[Startup] 保存済みアクセストークンは無効でした。リフレッシュを試行します");
+                    }
 
-                    OAuthToken = "";
+                    this.OAuthToken = "";
                 }
                 catch (Exception ex)
                 {
@@ -661,31 +1065,31 @@ namespace TwitchChatOverlay.ViewModels
                 LogService.Debug("[Startup] リフレッシュトークンで更新を試行します");
                 try
                 {
-                    TokenInfo = "🔄 トークンを更新中...";
+                    this.TokenInfo = "🔄 トークンを更新中...";
                     var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
                     var newToken = await oauthServer.RefreshTokenAsync(settings.RefreshToken);
 
-                    OAuthToken = newToken.AccessToken;
+                    this.OAuthToken = newToken.AccessToken;
                     settings.OAuthToken = newToken.AccessToken;
                     settings.RefreshToken = newToken.RefreshToken;
                     settings.OAuthTokenSavedAt = DateTime.UtcNow;
-                    _settingsService.SaveSettings(settings);
+                    this._settingsService.SaveSettings(settings);
 
-                    string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-                    TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
-                    string expiryInfo = newToken.ExpiresIn > 0
+                    var savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                    this.TokenInfo = $"✅ {settings.OAuthTokenLogin ?? "(不明)"}  |  更新日: {savedAt}";
+                    var expiryInfo = newToken.ExpiresIn > 0
                         ? $"expires_in={newToken.ExpiresIn}s (期限: {DateTime.Now.AddSeconds(newToken.ExpiresIn):yyyy/MM/dd HH:mm:ss})"
                         : "expires_in 不明";
                     LogService.Debug($"[Startup] 起動時トークン更新成功 user={settings.OAuthTokenLogin ?? "(不明)"} {expiryInfo}");
-                    _nextRefreshExpiresIn = newToken.ExpiresIn;
-                    await AutoConnectAsync();
+                    this._nextRefreshExpiresIn = newToken.ExpiresIn;
+                    await this.AutoConnectAsync();
                     return;
                 }
                 catch (TwitchTokenRefreshException ex) when (ex.IsInvalidRefreshToken)
                 {
-                    InvalidateTwitchRefreshToken(settings, "Startup");
-                    TokenInfo = "⚠️ トークンの有効期限が切れました。再認可してください";
-                    OAuthToken = "";
+                    this.InvalidateTwitchRefreshToken(settings, "Startup");
+                    this.TokenInfo = "⚠️ トークンの有効期限が切れました。再認可してください";
+                    this.OAuthToken = "";
                     LogService.Warning("起動時のトークン更新に失敗しました。リフレッシュトークンが無効です", ex);
                     return;
                 }
@@ -695,22 +1099,24 @@ namespace TwitchChatOverlay.ViewModels
                 }
             }
 
-            if (string.IsNullOrEmpty(OAuthToken))
-                TokenInfo = null;
+            if (string.IsNullOrEmpty(this.OAuthToken))
+            {
+                this.TokenInfo = null;
+            }
         }
 
         private async Task CheckForUpdateAsync()
         {
             try
             {
-                var result = await _updateService.CheckForUpdateAsync();
+                var result = await this._updateService.CheckForUpdateAsync();
                 if (result.IsUpdateAvailable)
                 {
-                    LatestVersion = result.LatestVersion;
-                    _updateDownloadUrl = result.DownloadUrl;
-                    _updateChecksumUrl = result.ChecksumUrl;
-                    _updateReleasePageUrl = result.ReleasePageUrl;
-                    IsUpdateAvailable = true;
+                    this.LatestVersion = result.LatestVersion;
+                    this._updateDownloadUrl = result.DownloadUrl;
+                    this._updateChecksumUrl = result.ChecksumUrl;
+                    this._updateReleasePageUrl = result.ReleasePageUrl;
+                    this.IsUpdateAvailable = true;
                 }
             }
             catch (Exception ex)
@@ -722,33 +1128,36 @@ namespace TwitchChatOverlay.ViewModels
 
         private async void ExecuteUpdate()
         {
-            if (string.IsNullOrEmpty(_updateDownloadUrl))
+            if (string.IsNullOrEmpty(this._updateDownloadUrl))
             {
-                if (!string.IsNullOrEmpty(_updateReleasePageUrl))
-                    _updateService.OpenReleasePage(_updateReleasePageUrl);
+                if (!string.IsNullOrEmpty(this._updateReleasePageUrl))
+                {
+                    this._updateService.OpenReleasePage(this._updateReleasePageUrl);
+                }
+
                 return;
             }
 
-            IsUpdating = true;
-            UpdateProgressPercent = 0;
+            this.IsUpdating = true;
+            this.UpdateProgressPercent = 0;
 
             try
             {
-                var progress = new Progress<int>(p => UpdateProgressPercent = p);
-                string filePath = await _updateService.DownloadUpdateAsync(_updateDownloadUrl, _updateChecksumUrl, progress);
-                _updateService.LaunchInstaller(filePath);
+                var progress = new Progress<int>(p => this.UpdateProgressPercent = p);
+                var filePath = await this._updateService.DownloadUpdateAsync(this._updateDownloadUrl, this._updateChecksumUrl, progress);
+                this._updateService.LaunchInstaller(filePath);
                 // LaunchInstaller が Shutdown を呼ぶため、ここには通常到達しない。
                 // .zip の自己更新バッチ起動後も Shutdown するため同様。
             }
             catch (Exception ex)
             {
                 LogService.Error("アップデートの実行に失敗しました", ex);
-                StatusMessage = $"更新の失敗: {ex.Message}";
+                this.StatusMessage = $"更新の失敗: {ex.Message}";
             }
             finally
             {
-                IsUpdating = false;
-                UpdateProgressPercent = 0;
+                this.IsUpdating = false;
+                this.UpdateProgressPercent = 0;
             }
         }
 
@@ -756,153 +1165,181 @@ namespace TwitchChatOverlay.ViewModels
         {
             try
             {
-                IsAuthorizingOAuth = true;
-                DeviceUserCode = "";
-                StatusMessage = "デバイス認可を開始中...";
+                this.IsAuthorizingOAuth = true;
+                this.DeviceUserCode = "";
+                this.StatusMessage = "デバイス認可を開始中...";
 
                 var oauthServer = new TwitchOAuthServer(BuildSecrets.ClientId);
                 var tokenResponse = await oauthServer.AuthorizeAsync((userCode, verUri) =>
                 {
-                    DeviceUserCode = userCode;
-                    StatusMessage = $"ブラウザで {verUri} を開き、コード [{userCode}] を入力してください";
+                    this.DeviceUserCode = userCode;
+                    this.StatusMessage = $"ブラウザで {verUri} を開き、コード [{userCode}] を入力してください";
                 });
 
-                OAuthToken = tokenResponse.AccessToken;
-                DeviceUserCode = "";
+                this.OAuthToken = tokenResponse.AccessToken;
+                this.DeviceUserCode = "";
 
-                StatusMessage = "ユーザー情報を取得中...";
-                var (userId, login) = await _apiService.GetCurrentUserAsync(OAuthToken, BuildSecrets.ClientId);
+                this.StatusMessage = "ユーザー情報を取得中...";
+                var (userId, login) = await this._apiService.GetCurrentUserAsync(this.OAuthToken, BuildSecrets.ClientId);
 
-                var settings = _settingsService.LoadSettings();
+                var settings = this._settingsService.LoadSettings();
                 settings.UserId = userId;
                 settings.BroadcasterUserId = userId;
-                settings.OAuthToken = OAuthToken;
+                settings.OAuthToken = this.OAuthToken;
                 settings.RefreshToken = tokenResponse.RefreshToken;
                 settings.OAuthTokenSavedAt = DateTime.UtcNow;
                 settings.OAuthTokenLogin = login;
-                _settingsService.SaveSettings(settings);
+                this._settingsService.SaveSettings(settings);
 
-                string savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-                TokenInfo = $"✅ {login}  |  取得日: {savedAt}";
+                var savedAt = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+                this.TokenInfo = $"✅ {login}  |  取得日: {savedAt}";
                 LogService.Info($"OAuth認可完了: login={login}");
-                StatusMessage = $"✅ OAuth認可完了！ログイン: {login}";
+                this.StatusMessage = $"✅ OAuth認可完了！ログイン: {login}";
             }
             catch (Exception ex)
             {
                 LogService.Error("OAuth認可エラー", ex);
-                StatusMessage = $"OAuth認可エラー: {ex.Message}";
-                DeviceUserCode = "";
+                this.StatusMessage = $"OAuth認可エラー: {ex.Message}";
+                this.DeviceUserCode = "";
             }
             finally
             {
-                IsAuthorizingOAuth = false;
+                this.IsAuthorizingOAuth = false;
             }
         }
 
         private async void Connect()
         {
-            if (string.IsNullOrWhiteSpace(ChannelName) ||
-                string.IsNullOrWhiteSpace(OAuthToken))
+            if (string.IsNullOrWhiteSpace(this.ChannelName) ||
+                string.IsNullOrWhiteSpace(this.OAuthToken))
             {
-                StatusMessage = "チャンネル名とOAuthトークンを入力してください";
+                this.StatusMessage = "チャンネル名とOAuthトークンを入力してください";
                 return;
             }
 
             try
             {
-                StatusMessage = "EventSubに接続中...";
-                var settings = _settingsService.LoadSettings();
+                this.StatusMessage = "EventSubに接続中...";
+                var settings = this._settingsService.LoadSettings();
 
                 // 接続時にチャンネル名を自動保存
-                settings.ChannelName = ChannelName;
+                settings.ChannelName = this.ChannelName;
 
                 // 接続履歴を更新 (最大10件、重複を排除して先頭に追加)
-                settings.RecentChannels.Remove(ChannelName);
-                settings.RecentChannels.Insert(0, ChannelName);
+                _ = settings.RecentChannels.Remove(this.ChannelName);
+                settings.RecentChannels.Insert(0, this.ChannelName);
                 if (settings.RecentChannels.Count > 10)
+                {
                     settings.RecentChannels.RemoveAt(settings.RecentChannels.Count - 1);
+                }
 
-                _settingsService.SaveSettings(settings);
+                this._settingsService.SaveSettings(settings);
 
                 // UI の履歴リストを更新
-                RecentChannels.Clear();
+                this.RecentChannels.Clear();
                 foreach (var ch in settings.RecentChannels)
-                    RecentChannels.Add(ch);
-                RaisePropertyChanged(nameof(HasRecentChannels));
+                {
+                    this.RecentChannels.Add(ch);
+                }
 
-                string broadcasterUserId = settings.BroadcasterUserId;
-                string userId = settings.UserId;
+                this.RaisePropertyChanged(nameof(this.HasRecentChannels));
+
+                var broadcasterUserId = settings.BroadcasterUserId;
+                var userId = settings.UserId;
 
                 if (string.IsNullOrEmpty(broadcasterUserId) || string.IsNullOrEmpty(userId))
                 {
-                    StatusMessage = "まずOAuth認可を行ってください";
+                    this.StatusMessage = "まずOAuth認可を行ってください";
                     return;
                 }
 
-                await _eventSubService.ConnectAsync(OAuthToken, BuildSecrets.ClientId, broadcasterUserId, userId);
-                LogService.Info($"EventSub接続完了: {ChannelName}");
-                StatusMessage = $"✅ 接続完了 ({ChannelName})";
-                StartTokenRefreshTimer();
-                StartValidateTimer();
-                ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
-                ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+                await this._eventSubService.ConnectAsync(this.OAuthToken, BuildSecrets.ClientId, broadcasterUserId, userId);
+                LogService.Info($"EventSub接続完了: {this.ChannelName}");
+                this.StatusMessage = $"✅ 接続完了 ({this.ChannelName})";
+                this.StartTokenRefreshTimer();
+                this.StartValidateTimer();
+                ((DelegateCommand)this.ConnectCommand).RaiseCanExecuteChanged();
+                ((DelegateCommand)this.DisconnectCommand).RaiseCanExecuteChanged();
             }
             catch (Exception ex)
             {
                 LogService.Error("EventSub接続エラー", ex);
-                StatusMessage = $"接続エラー: {ex.Message}";
+                this.StatusMessage = $"接続エラー: {ex.Message}";
             }
         }
 
         private void Disconnect()
         {
             LogService.Info("EventSub切断要求");
-            StopTokenRefreshTimer();
-            StopValidateTimer();
-            _eventSubService.Disconnect();
-            StatusMessage = "切断しました";
-            ((DelegateCommand)ConnectCommand).RaiseCanExecuteChanged();
-            ((DelegateCommand)DisconnectCommand).RaiseCanExecuteChanged();
+            this.StopTokenRefreshTimer();
+            this.StopValidateTimer();
+            this._eventSubService.Disconnect();
+            this.StatusMessage = "切断しました";
+            ((DelegateCommand)this.ConnectCommand).RaiseCanExecuteChanged();
+            ((DelegateCommand)this.DisconnectCommand).RaiseCanExecuteChanged();
         }
 
-        private bool CanConnect() => !_eventSubService.IsConnected;
-        private bool CanDisconnect() => _eventSubService.IsConnected;
+        private bool CanConnect()
+        {
+            return !this._eventSubService.IsConnected;
+        }
+
+        private bool CanDisconnect()
+        {
+            return this._eventSubService.IsConnected;
+        }
 
         private void SaveSettings()
         {
             try
             {
-                var settings = _settingsService.LoadSettings();
-                settings.ChannelName = ChannelName;
-                settings.OAuthToken = OAuthToken;
-                settings.ShowReward = ShowReward;
-                settings.ShowRaid = ShowRaid;
-                settings.ShowFollow = ShowFollow;
-                settings.ShowSubscribe = ShowSubscribe;
-                settings.ShowGiftSubscribe = ShowGiftSubscribe;
-                settings.ShowResub = ShowResub;
-                settings.ShowHypeTrainBegin = ShowHypeTrainBegin;
-                settings.ShowHypeTrainEnd = ShowHypeTrainEnd;
-                settings.ToastDurationSeconds = ToastDurationSeconds;
-                settings.ToastMaxCount = ToastMaxCount;
-                settings.ToastPosition = (Services.ToastPosition)ToastPositionIndex;
-                settings.ToastMonitorIndex = ToastMonitorIndex;
-                settings.ToastFontSize = ToastFontSize;
-                settings.ToastWidth = ToastWidth;
-                settings.ToastBackgroundOpacity = ToastBackgroundOpacity;
-                settings.ToastFontFamily = ToastFontFamily;
-                settings.ToastBackgroundMode = (Services.ToastBackgroundMode)ToastBackgroundModeIndex;
-                settings.ToastCustomBackgroundColor = ToastCustomBackgroundColor;
-                settings.ToastFontColorMode = (Services.ToastFontColorMode)ToastFontColorModeIndex;
-                settings.ToastCustomFontColor = ToastCustomFontColor;
+                var settings = this._settingsService.LoadSettings();
+                settings.SelectedTabIndex = this.SelectedTabIndex;
+                settings.ChannelName = this.ChannelName;
+                settings.OAuthToken = this.OAuthToken;
+                settings.YouTubeTokenInfo = this.YouTubeTokenInfo;
+                settings.ShowReward = this.ShowReward;
+                settings.ShowRaid = this.ShowRaid;
+                settings.ShowFollow = this.ShowFollow;
+                settings.ShowSubscribe = this.ShowSubscribe;
+                settings.ShowGiftSubscribe = this.ShowGiftSubscribe;
+                settings.ShowResub = this.ShowResub;
+                settings.ShowHypeTrainBegin = this.ShowHypeTrainBegin;
+                settings.ShowHypeTrainEnd = this.ShowHypeTrainEnd;
+                settings.ShowYouTubeChat = this.ShowYouTubeChat;
+                settings.ShowYouTubeSuperChat = this.ShowYouTubeSuperChat;
+                settings.ShowYouTubeMembership = this.ShowYouTubeMembership;
+                settings.YouTubeLegalConsentAccepted = this.YouTubeLegalConsentAccepted;
+                settings.YouTubeMessageCacheSize = this.YouTubeMessageCacheSize;
+                settings.ObsWebSocketEnabled = this.ObsWebSocketEnabled;
+                settings.ObsWebSocketHost = this.ObsWebSocketHost;
+                settings.ObsWebSocketPort = this.ObsWebSocketPort;
+                settings.ObsWebSocketPassword = this.ObsWebSocketPassword;
+                settings.ToastDurationSeconds = this.ToastDurationSeconds;
+                settings.ToastMaxCount = this.ToastMaxCount;
+                settings.ToastPosition = (Services.ToastPosition)this.ToastPositionIndex;
+                settings.ToastMonitorIndex = this.ToastMonitorIndex;
+                settings.ToastFontSize = this.ToastFontSize;
+                settings.ToastWidth = this.ToastWidth;
+                settings.ToastBackgroundOpacity = this.ToastBackgroundOpacity;
+                settings.ToastFontFamily = this.ToastFontFamily;
+                settings.ToastBackgroundMode = (Services.ToastBackgroundMode)this.ToastBackgroundModeIndex;
+                settings.ToastCustomBackgroundColor = this.ToastCustomBackgroundColor;
+                settings.ToastFontColorMode = (Services.ToastFontColorMode)this.ToastFontColorModeIndex;
+                settings.ToastCustomFontColor = this.ToastCustomFontColor;
+                settings.NotificationSoundSourceMode = (Services.NotificationSoundSourceMode)this.NotificationSoundSourceModeIndex;
+                settings.NotificationSoundFilePath = this.NotificationSoundFilePath ?? "";
+                settings.NotificationSoundVolumePercent = this.NotificationSoundVolumePercent;
+                settings.NotificationSoundOutputDeviceId = this.NotificationSoundOutputDeviceId ?? "";
+                settings.NotificationSoundEnabled = this.NotificationSoundEnabled;
 
-                _settingsService.SaveSettings(settings);
-                StatusMessage = "✅ 設定を保存しました";
+                this._settingsService.SaveSettings(settings);
+                this.StatusMessage = "✅ 設定を保存しました";
             }
             catch (Exception ex)
             {
                 LogService.Error("設定の保存に失敗しました", ex);
-                StatusMessage = $"設定の保存に失敗: {ex.Message}";
+                this.StatusMessage = $"設定の保存に失敗: {ex.Message}";
             }
         }
 
@@ -910,57 +1347,752 @@ namespace TwitchChatOverlay.ViewModels
         {
             try
             {
-                var settings = _settingsService.LoadSettings();
-                ChannelName = settings.ChannelName ?? "";
-                OAuthToken = settings.OAuthToken ?? "";
+                var settings = this._settingsService.LoadSettings();
+                this.SelectedTabIndex = settings.SelectedTabIndex;
+                this.ChannelName = settings.ChannelName ?? "";
+                this.OAuthToken = settings.OAuthToken ?? "";
+                this.YouTubeTokenInfo = string.IsNullOrEmpty(settings.YouTubeTokenInfo) ? "未認可" : settings.YouTubeTokenInfo;
 
-                RecentChannels.Clear();
+                this.RecentChannels.Clear();
                 foreach (var ch in settings.RecentChannels)
-                    RecentChannels.Add(ch);
-                RaisePropertyChanged(nameof(HasRecentChannels));
-                ShowReward = settings.ShowReward;
-                ShowRaid = settings.ShowRaid;
-                ShowFollow = settings.ShowFollow;
-                ShowSubscribe = settings.ShowSubscribe;
-                ShowGiftSubscribe = settings.ShowGiftSubscribe;
-                ShowResub = settings.ShowResub;
-                ShowHypeTrainBegin = settings.ShowHypeTrainBegin;
-                ShowHypeTrainEnd = settings.ShowHypeTrainEnd;
-                ToastDurationSeconds = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds : 5;
-                ToastMaxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
-                ToastPositionIndex = (int)settings.ToastPosition;
-                ToastMonitorIndex = (settings.ToastMonitorIndex >= 0 && settings.ToastMonitorIndex < WinForms.Screen.AllScreens.Length)
+                {
+                    this.RecentChannels.Add(ch);
+                }
+
+                this.RaisePropertyChanged(nameof(this.HasRecentChannels));
+                this.ShowReward = settings.ShowReward;
+                this.ShowRaid = settings.ShowRaid;
+                this.ShowFollow = settings.ShowFollow;
+                this.ShowSubscribe = settings.ShowSubscribe;
+                this.ShowGiftSubscribe = settings.ShowGiftSubscribe;
+                this.ShowResub = settings.ShowResub;
+                this.ShowHypeTrainBegin = settings.ShowHypeTrainBegin;
+                this.ShowHypeTrainEnd = settings.ShowHypeTrainEnd;
+                this.ShowYouTubeChat = settings.ShowYouTubeChat;
+                this.ShowYouTubeSuperChat = settings.ShowYouTubeSuperChat;
+                this.ShowYouTubeMembership = settings.ShowYouTubeMembership;
+                this.YouTubeLegalConsentAccepted = settings.YouTubeLegalConsentAccepted;
+                this.YouTubeMessageCacheSize = Math.Max(
+                    settings.YouTubeMessageCacheSize,
+                    YouTubeLiveChatService.MinMessageCacheSize);
+                this.ObsWebSocketEnabled = settings.ObsWebSocketEnabled;
+                this.ObsWebSocketHost = string.IsNullOrWhiteSpace(settings.ObsWebSocketHost) ? "127.0.0.1" : settings.ObsWebSocketHost;
+                this.ObsWebSocketPort = settings.ObsWebSocketPort > 0 ? settings.ObsWebSocketPort : 4455;
+                this.ObsWebSocketPassword = settings.ObsWebSocketPassword ?? "";
+                this.UpdateObsStatusMessage();
+                this.ToastDurationSeconds = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds : 5;
+                this.ToastMaxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
+                this.ToastPositionIndex = (int)settings.ToastPosition;
+                this.ToastMonitorIndex = (settings.ToastMonitorIndex >= 0 && settings.ToastMonitorIndex < WinForms.Screen.AllScreens.Length)
                     ? settings.ToastMonitorIndex : 0;
-                ToastFontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
-                ToastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
-                ToastBackgroundOpacity = settings.ToastBackgroundOpacity >= 0 ? settings.ToastBackgroundOpacity : 0.8;
-                ToastFontFamily = settings.ToastFontFamily ?? "";
-                ToastBackgroundModeIndex = (int)settings.ToastBackgroundMode;
-                ToastCustomBackgroundColor = string.IsNullOrEmpty(settings.ToastCustomBackgroundColor)
+                this.ToastFontSize = settings.ToastFontSize > 0 ? settings.ToastFontSize : 12;
+                this.ToastWidth = settings.ToastWidth > 0 ? settings.ToastWidth : 380;
+                this.ToastBackgroundOpacity = settings.ToastBackgroundOpacity >= 0 ? settings.ToastBackgroundOpacity : 0.8;
+                this.ToastFontFamily = settings.ToastFontFamily ?? "";
+                this.ToastBackgroundModeIndex = (int)settings.ToastBackgroundMode;
+                this.ToastCustomBackgroundColor = string.IsNullOrEmpty(settings.ToastCustomBackgroundColor)
                     ? "#1A1A2E"
                     : settings.ToastCustomBackgroundColor;
-                ToastFontColorModeIndex = (int)settings.ToastFontColorMode;
-                ToastCustomFontColor = string.IsNullOrEmpty(settings.ToastCustomFontColor)
+                this.ToastFontColorModeIndex = (int)settings.ToastFontColorMode;
+                this.ToastCustomFontColor = string.IsNullOrEmpty(settings.ToastCustomFontColor)
                     ? "#FFFFFF"
                     : settings.ToastCustomFontColor;
+                this.NotificationSoundSourceModeIndex = (int)settings.NotificationSoundSourceMode;
+                this.NotificationSoundFilePath = settings.NotificationSoundFilePath ?? "";
+                this.NotificationSoundVolumePercent = Math.Clamp(settings.NotificationSoundVolumePercent, 0, 100);
+                this.NotificationSoundOutputDeviceId = this.ResolveAudioOutputDeviceId(settings.NotificationSoundOutputDeviceId);
+                this.NotificationSoundEnabled = settings.NotificationSoundEnabled;
             }
             catch (Exception ex)
             {
                 LogService.Error("設定の読み込みに失敗しました", ex);
-                StatusMessage = $"設定の読み込みに失敗: {ex.Message}";
+                this.StatusMessage = $"設定の読み込みに失敗: {ex.Message}";
             }
+        }
+
+        private void ReloadAudioOutputDevices()
+        {
+            this.AudioOutputDevices.Clear();
+            foreach (var device in this._notificationSoundService.GetOutputDevices())
+            {
+                this.AudioOutputDevices.Add(device);
+            }
+        }
+
+        private string ResolveAudioOutputDeviceId(string deviceId)
+        {
+            if (string.IsNullOrWhiteSpace(deviceId))
+            {
+                return "";
+            }
+
+            foreach (var device in this.AudioOutputDevices)
+            {
+                if (string.Equals(device.Id, deviceId, StringComparison.Ordinal))
+                {
+                    return deviceId;
+                }
+            }
+
+            return "";
+        }
+
+        private void BrowseNotificationSoundFile()
+        {
+            var dialog = new OpenFileDialog
+            {
+                Title = "通知音ファイルを選択",
+                Filter = "音声ファイル (*.wav;*.mp3;*.ogg)|*.wav;*.mp3;*.ogg|WAV (*.wav)|*.wav|MP3 (*.mp3)|*.mp3|OGG (*.ogg)|*.ogg",
+                CheckFileExists = true,
+                Multiselect = false,
+            };
+
+            if (!string.IsNullOrWhiteSpace(this.NotificationSoundFilePath))
+            {
+                dialog.FileName = this.NotificationSoundFilePath;
+            }
+
+            var result = dialog.ShowDialog();
+            if (result != true)
+            {
+                return;
+            }
+
+            this.NotificationSoundFilePath = dialog.FileName;
+            this.NotificationSoundSourceModeIndex = 1;
+            this.StatusMessage = "通知音ファイルを選択しました。設定を保存すると反映されます。";
+        }
+
+        private void PreviewNotificationSound()
+        {
+            try
+            {
+                this._notificationSoundService.PlayPreviewSound(new AppSettings
+                {
+                    NotificationSoundEnabled = this.NotificationSoundEnabled,
+                    NotificationSoundSourceMode = (Services.NotificationSoundSourceMode)this.NotificationSoundSourceModeIndex,
+                    NotificationSoundFilePath = this.NotificationSoundFilePath ?? "",
+                    NotificationSoundVolumePercent = this.NotificationSoundVolumePercent,
+                    NotificationSoundOutputDeviceId = this.NotificationSoundOutputDeviceId ?? "",
+                });
+                this.StatusMessage = "通知音をプレビュー再生しました";
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("通知音プレビューの再生に失敗しました", ex);
+                this.StatusMessage = $"通知音プレビューの再生に失敗: {ex.Message}";
+            }
+        }
+
+        private void PreviewCommonComment()
+        {
+            this.PreviewComment(CreateCommonPreviewNotification(), "共通設定の表示プレビューを表示しました");
+        }
+
+        private void PreviewTwitchComment()
+        {
+            this.PreviewComment(CreateTwitchPreviewNotification(), "Twitch コメントプレビューを表示しました");
+        }
+
+        private void PreviewYouTubeComment()
+        {
+            this.PreviewComment(CreateYouTubePreviewNotification(), "YouTube コメントプレビューを表示しました");
+        }
+
+        private void PreviewComment(OverlayNotification notification, string successMessage)
+        {
+            try
+            {
+                this._toastService.ShowPreviewNotification(notification);
+                this.StatusMessage = successMessage;
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("コメントプレビューの表示に失敗しました", ex);
+                this.StatusMessage = $"コメントプレビューの表示に失敗: {ex.Message}";
+            }
+        }
+
+        private static OverlayNotification CreateCommonPreviewNotification()
+        {
+            return new OverlayNotification
+            {
+                SourcePlatform = "Preview",
+                Type = NotificationType.Chat,
+                Username = "Overlay Preview",
+                DisplayText = "共通設定のフォントや背景がこの見た目で反映されます。",
+                UserColor = "#4CAF50",
+                Fragments =
+                [
+                    new TextFragment { Text = "共通設定のフォントや背景がこの見た目で反映されます。" }
+                ]
+            };
+        }
+
+        private static OverlayNotification CreateTwitchPreviewNotification()
+        {
+            return new OverlayNotification
+            {
+                SourcePlatform = "Twitch",
+                Type = NotificationType.Chat,
+                Username = "twitch_user_01",
+                DisplayText = "今日は配信ありがとう！このコメント表示で確認できます。",
+                UserColor = "#9146FF",
+                Fragments =
+                [
+                    new TextFragment { Text = "今日は配信ありがとう！このコメント表示で確認できます。" }
+                ]
+            };
+        }
+
+        private static OverlayNotification CreateYouTubePreviewNotification()
+        {
+            return new OverlayNotification
+            {
+                SourcePlatform = "YouTube",
+                Type = NotificationType.Chat,
+                Username = "YouTube Viewer",
+                DisplayText = "このプレビューで YouTube コメントの見え方を確認できます。",
+                UserColor = "#FF3B30",
+                Fragments =
+                [
+                    new TextFragment { Text = "このプレビューで YouTube コメントの見え方を確認できます。" }
+                ]
+            };
+        }
+
+        private async void AuthorizeYouTubeOAuth()
+        {
+            try
+            {
+                if (!this.YouTubeLegalConsentAccepted)
+                {
+                    this.YouTubeStatusMessage = "プライバシーポリシーと利用条件を確認し、同意してから認可してください";
+                    return;
+                }
+
+                this.YouTubeStatusMessage = "YouTube OAuth 認可を開始しています...";
+                var token = await this._youTubeOAuthService.AuthorizeAsync(BuildSecrets.YouTubeClientId);
+
+                var settings = this._settingsService.LoadSettings();
+                settings.YouTubeOAuthToken = token.AccessToken;
+                settings.YouTubeRefreshToken = token.RefreshToken;
+                settings.YouTubeTokenInfo = $"✅ 認可済み | 取得日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                this._settingsService.SaveSettings(settings);
+
+                this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                this.YouTubeStatusMessage = "✅ YouTube OAuth 認可が完了しました";
+            }
+            catch (YouTubeOAuthException ex) when (ex.IsUserDenied)
+            {
+                LogService.Info("YouTube OAuth認可はユーザーによりキャンセルされました");
+                this.YouTubeStatusMessage = ex.Message;
+            }
+            catch (YouTubeOAuthException ex) when (ex.IsTimedOut)
+            {
+                LogService.Warning("YouTube OAuth認可はタイムアウトしました");
+                this.YouTubeStatusMessage = ex.Message;
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("YouTube OAuth認可エラー", ex);
+                this.YouTubeStatusMessage = $"YouTube OAuth エラー: {ex.Message}";
+            }
+        }
+
+        private bool CanAuthorizeYouTubeOAuth()
+        {
+            return this.YouTubeLegalConsentAccepted;
+        }
+
+        private bool CanConnectYouTube()
+        {
+            return this.YouTubeLegalConsentAccepted;
+        }
+
+        private bool CanConnectObs()
+        {
+            return this.ObsWebSocketEnabled && !this._obsWebSocketService.IsConnected;
+        }
+
+        private bool CanDisconnectObs()
+        {
+            return this._obsWebSocketService.IsConnected;
+        }
+
+        private async void ConnectYouTube()
+        {
+            if (!this.YouTubeLegalConsentAccepted)
+            {
+                this.YouTubeStatusMessage = "プライバシーポリシーと利用条件を確認し、同意してから接続してください";
+                return;
+            }
+
+            var settings = this._settingsService.LoadSettings();
+            if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+            {
+                this.YouTubeStatusMessage = "先にYouTube OAuth認可を実行してください";
+                return;
+            }
+
+            try
+            {
+                this.YouTubeStatusMessage = "YouTube Live Chat に接続中...";
+                this._settingsService.SaveSettings(settings);
+                var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
+                var waitForObsSignal = UseObsForDetection;
+                this._lastYouTubeWaitForObsSignal = waitForObsSignal;
+
+                try
+                {
+                    await this._youTubeLiveChatService.ConnectAsync(
+                        settings.YouTubeOAuthToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
+                }
+                catch (Exception ex) when (IsYouTubeUnauthorized(ex))
+                {
+                    if (string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
+                    {
+                        throw;
+                    }
+
+                    var refreshed = await this._youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                    settings.YouTubeOAuthToken = refreshed.AccessToken;
+                    settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                    settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                    this._settingsService.SaveSettings(settings);
+
+                    this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                    await this._youTubeLiveChatService.ConnectAsync(
+                        settings.YouTubeOAuthToken,
+                        checkImmediately: !waitForObsSignal,
+                        waitForObsSignalBeforePolling: waitForObsSignal);
+                }
+
+                this.YouTubeStatusMessage = this._youTubeLiveChatService.IsWaitingForBroadcast
+                    ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                    : BuildYouTubeConnectedMessage("✅ YouTube Live Chat 接続完了");
+                this.UpdateYouTubeTokenRefreshTimerState();
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("YouTube接続エラー", ex);
+                this.YouTubeStatusMessage = $"YouTube接続エラー: {ex.Message}";
+            }
+        }
+
+        private void DisconnectYouTube()
+        {
+            this.StopYouTubeTokenRefreshTimer();
+            this._youTubeLiveChatService.Disconnect();
+
+            var settings = this._settingsService.LoadSettings();
+            settings.YouTubeAutoConnectEnabled = false;
+            this._settingsService.SaveSettings(settings);
+
+            this.YouTubeStatusMessage = "YouTube接続を切断しました";
+        }
+
+        private async void ConnectObs()
+        {
+            this._obsAutoReconnectEnabled = true;
+            await this.TryConnectObsAsync(isAutomatic: false, statusPrefix: "OBS WebSocket に接続中...");
+        }
+
+        private void DisconnectObs()
+        {
+            this._obsAutoReconnectEnabled = false;
+            this.StopObsReconnectTimer();
+            this._obsWebSocketService.Disconnect();
+            this.ObsStatusMessage = "OBS接続を切断しました";
+            this.RaiseObsCommandStateChanged();
+        }
+
+        private async Task TryConnectObsAsync(bool isAutomatic, string statusPrefix)
+        {
+            if (!this.ObsWebSocketEnabled)
+            {
+                this.StopObsReconnectTimer();
+                this.UpdateObsStatusMessage();
+                return;
+            }
+
+            if (Interlocked.Exchange(ref this._isObsReconnectInProgress, 1) == 1)
+            {
+                return;
+            }
+
+            try
+            {
+                this.ObsStatusMessage = statusPrefix;
+                var result = await this._obsWebSocketService.ConnectAsync(
+                    this.ObsWebSocketHost,
+                    this.ObsWebSocketPort,
+                    this.ObsWebSocketPassword);
+
+                if (result.IsConnected)
+                {
+                    this.StopObsReconnectTimer();
+                    this.UpdateObsStatusMessage();
+                    return;
+                }
+
+                if (result.ShouldRetry)
+                {
+                    this._obsAutoReconnectEnabled = true;
+                    this.StartObsReconnectTimer();
+                    this.ObsStatusMessage = isAutomatic
+                        ? "OBS が見つからないため、10 秒ごとに再接続します。"
+                        : "OBS が見つからないため、10 秒ごとに再接続します。OBS を起動すると自動接続します。";
+                    return;
+                }
+
+                this._obsAutoReconnectEnabled = false;
+                this.StopObsReconnectTimer();
+                this.ObsStatusMessage = result.Message;
+            }
+            finally
+            {
+                _ = Interlocked.Exchange(ref this._isObsReconnectInProgress, 0);
+                this.RaiseObsCommandStateChanged();
+            }
+        }
+
+        private void OpenPrivacyPolicy()
+        {
+            this.OpenBundledDocument(Path.Combine("Docs", "PrivacyPolicy.html"), "プライバシーポリシーを開きました");
+        }
+
+        private void OpenTermsOfUse()
+        {
+            this.OpenBundledDocument(Path.Combine("Docs", "TermsOfUse.html"), "利用条件を開きました");
+        }
+
+        private void OpenYouTubeTerms()
+        {
+            this.OpenExternalUrl(YouTubeTermsUrl, "YouTube 利用規約を開きました");
+        }
+
+        private void OpenGooglePrivacyPolicy()
+        {
+            this.OpenExternalUrl(GooglePrivacyPolicyUrl, "Google Privacy Policy を開きました");
+        }
+
+        private void OpenGooglePermissions()
+        {
+            this.OpenExternalUrl(GoogleSecurityPermissionsUrl, "Google 権限管理ページを開きました");
+        }
+
+        private void OpenSupport()
+        {
+            this.OpenExternalUrl(GitHubDiscussionsUrl, "サポート窓口を開きました");
+        }
+
+        private void ClearYouTubeAuthorization()
+        {
+            var result = MessageBox.Show(
+                "この操作は、アプリに保存されている YouTube 認可情報を削除します。Google アカウント側の権限は取り消されません。続行しますか。",
+                "YouTube 認可情報を削除",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var settings = this._settingsService.LoadSettings();
+            this.ResetYouTubeAuthorization(settings);
+            this.YouTubeStatusMessage = "YouTube の保存済み認可情報を削除しました。Google 側の権限は権限管理ページから取り消してください";
+        }
+
+        private async void RevokeYouTubeAuthorization()
+        {
+            var result = MessageBox.Show(
+                "この操作は、Google 側の YouTube API 権限取り消しを試行し、成功・失敗にかかわらずアプリに保存された認可情報も削除します。続行しますか。",
+                "YouTube 権限を取り消して削除",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var settings = this._settingsService.LoadSettings();
+            var tokenToRevoke = string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken)
+                ? settings.YouTubeOAuthToken
+                : settings.YouTubeRefreshToken;
+            var revokeSucceeded = false;
+
+            if (!string.IsNullOrWhiteSpace(tokenToRevoke))
+            {
+                try
+                {
+                    await this._youTubeOAuthService.RevokeTokenAsync(tokenToRevoke);
+                    revokeSucceeded = true;
+                }
+                catch (Exception ex)
+                {
+                    LogService.Warning("YouTube OAuth 権限の取り消しに失敗しました。ローカル情報の削除は続行します", ex);
+                }
+            }
+
+            this.ResetYouTubeAuthorization(settings);
+            this.YouTubeStatusMessage = revokeSucceeded
+                ? "YouTube 権限を取り消し、保存済み認可情報を削除しました"
+                : "Google 側の権限取り消しは確認できませんでしたが、保存済み認可情報は削除しました。必要に応じて Google 権限管理ページも確認してください";
+        }
+
+        private void OpenBundledDocument(string relativePath, string successMessage)
+        {
+            try
+            {
+                var fullPath = Path.Combine(AppContext.BaseDirectory, relativePath);
+                if (!File.Exists(fullPath))
+                {
+                    throw new FileNotFoundException($"文書ファイルが見つかりません: {fullPath}");
+                }
+
+                _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true });
+                this.StatusMessage = successMessage;
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("同梱文書の表示に失敗しました", ex);
+                this.StatusMessage = $"文書を開けませんでした: {ex.Message}";
+            }
+        }
+
+        private void OpenExternalUrl(string url, string successMessage)
+        {
+            try
+            {
+                _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                this.StatusMessage = successMessage;
+            }
+            catch (Exception ex)
+            {
+                LogService.Error("外部リンクの表示に失敗しました", ex);
+                this.StatusMessage = $"リンクを開けませんでした: {ex.Message}";
+            }
+        }
+
+        private void ResetYouTubeAuthorization(AppSettings settings)
+        {
+            this.StopYouTubeTokenRefreshTimer();
+            this._youTubeLiveChatService.Disconnect();
+
+            settings.YouTubeOAuthToken = "";
+            settings.YouTubeRefreshToken = "";
+            settings.YouTubeTokenInfo = "";
+            settings.YouTubeAutoConnectEnabled = false;
+            this._settingsService.SaveSettings(settings);
+
+            this.YouTubeTokenInfo = "未認可";
+        }
+
+        private async void OnYouTubeConnectionLost(object sender, YouTubeConnectionLostEventArgs e)
+        {
+            if (Interlocked.Exchange(ref this._isHandlingYouTubeConnectionLost, 1) == 1)
+            {
+                return;
+            }
+
+            try
+            {
+                this.StopYouTubeTokenRefreshTimer();
+                var settings = this._settingsService.LoadSettings();
+
+                if (e.IsUnauthorized && !string.IsNullOrWhiteSpace(settings.YouTubeRefreshToken))
+                {
+                    var refreshed = await this._youTubeOAuthService.RefreshTokenAsync(BuildSecrets.YouTubeClientId, settings.YouTubeRefreshToken);
+                    settings.YouTubeOAuthToken = refreshed.AccessToken;
+                    settings.YouTubeRefreshToken = refreshed.RefreshToken;
+                    settings.YouTubeTokenInfo = $"✅ 認可済み | 更新日: {DateTime.Now:yyyy/MM/dd HH:mm}";
+                    this._settingsService.SaveSettings(settings);
+                    this.YouTubeTokenInfo = settings.YouTubeTokenInfo;
+                }
+
+                if (string.IsNullOrWhiteSpace(settings.YouTubeOAuthToken))
+                {
+                    this.YouTubeStatusMessage = "YouTube接続が切断されました（再認可が必要）";
+                    return;
+                }
+
+                this.YouTubeStatusMessage = "YouTube再接続中...";
+                var (UseObsForDetection, ObsConnected) = this.GetObsPreparationState();
+                var waitForObsSignal = UseObsForDetection;
+                this._lastYouTubeWaitForObsSignal = waitForObsSignal;
+                await this._youTubeLiveChatService.ReconnectAsync(
+                    settings.YouTubeOAuthToken,
+                    checkImmediately: !waitForObsSignal,
+                    waitForObsSignalBeforePolling: waitForObsSignal);
+                this.YouTubeStatusMessage = this._youTubeLiveChatService.IsWaitingForBroadcast
+                    ? BuildYouTubeWaitingMessage(waitForObsSignal)
+                    : BuildYouTubeConnectedMessage("✅ YouTube再接続完了");
+                this.UpdateYouTubeTokenRefreshTimerState();
+            }
+            catch (Exception ex)
+            {
+                LogService.Warning("YouTube再接続に失敗しました", ex);
+                this.YouTubeStatusMessage = $"YouTube再接続失敗: {ex.Message}";
+            }
+            finally
+            {
+                _ = Interlocked.Exchange(ref this._isHandlingYouTubeConnectionLost, 0);
+            }
+        }
+
+        private (bool UseObsForDetection, bool ObsConnected) GetObsPreparationState()
+        {
+            if (!this.ObsWebSocketEnabled)
+            {
+                return (false, false);
+            }
+
+            if (!this._obsWebSocketService.IsConnected)
+            {
+                LogService.Warning("OBS連携は有効ですが、OBS に未接続のため即時配信確認にフォールバックします。");
+                return (false, false);
+            }
+
+            return (true, true);
+        }
+
+        private void OnObsConnectionStateChanged(object sender, EventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                if (this._obsWebSocketService.IsConnected)
+                {
+                    this.StopObsReconnectTimer();
+                    this.UpdateObsStatusMessage();
+                }
+                else if (Interlocked.CompareExchange(ref this._isObsReconnectInProgress, 0, 0) == 0 && this._obsAutoReconnectEnabled && this.ObsWebSocketEnabled)
+                {
+                    this.StartObsReconnectTimer();
+                    this.ObsStatusMessage = "OBS との接続が切れました。10 秒ごとに再接続します。";
+                }
+                else if (!this._obsAutoReconnectEnabled)
+                {
+                    this.UpdateObsStatusMessage();
+                }
+
+                this.RaiseObsCommandStateChanged();
+            }));
+        }
+
+        private void OnObsStreamingStateChanged(object sender, ObsStreamingStateChangedEventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.UpdateObsStatusMessage();
+            }));
+
+            if (!e.IsStreaming)
+            {
+                return;
+            }
+
+            if (!this._youTubeLiveChatService.IsWaitingForBroadcast)
+            {
+                return;
+            }
+
+            this._youTubeLiveChatService.StartBroadcastPolling();
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.YouTubeStatusMessage = "⏳ OBS配信開始を検出。YouTube配信確認を開始しました...";
+            }));
+        }
+
+        private void OnYouTubeBroadcastDetected(object sender, EventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.YouTubeStatusMessage = BuildYouTubeConnectedMessage("✅ YouTube Live Chat 接続完了");
+                this.UpdateYouTubeTokenRefreshTimerState();
+            }));
+        }
+
+        private void OnYouTubeWaitingForBroadcastStarted(object sender, YouTubeWaitingForBroadcastEventArgs e)
+        {
+            var useObsForDetection = this.ObsWebSocketEnabled && this._obsWebSocketService.IsConnected;
+
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.UpdateYouTubeTokenRefreshTimerState();
+                this.YouTubeStatusMessage = BuildYouTubeWaitingMessage(useObsForDetection);
+            }));
+        }
+
+        private void OnYouTubeBroadcastEnded(object sender, YouTubeBroadcastEndedEventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.UpdateYouTubeTokenRefreshTimerState();
+                this.YouTubeStatusMessage = $"ℹ️ {e.Message} 再開するには再接続してください";
+            }));
+        }
+
+        private static string BuildYouTubeConnectedMessage(string prefix)
+        {
+            return $"{prefix} (gRPC ストリーム受信中)";
+        }
+
+        private void UpdateObsStatusMessage()
+        {
+            if (!this.ObsWebSocketEnabled)
+            {
+                this.StopObsReconnectTimer();
+                this._obsAutoReconnectEnabled = false;
+                this.ObsStatusMessage = "OBS連携は無効です";
+                return;
+            }
+
+            if (!this._obsWebSocketService.IsConnected)
+            {
+                this.ObsStatusMessage = "OBS未接続";
+                return;
+            }
+
+            this.ObsStatusMessage = this._obsWebSocketService.IsStreaming
+                ? "✅ OBS接続中 (配信中)"
+                : "✅ OBS接続中";
+        }
+
+        private void RaiseObsCommandStateChanged()
+        {
+            ((DelegateCommand)this.ConnectObsCommand).RaiseCanExecuteChanged();
+            ((DelegateCommand)this.DisconnectObsCommand).RaiseCanExecuteChanged();
+        }
+
+        private static string BuildYouTubeWaitingMessage(bool waitForObsSignal)
+        {
+            return waitForObsSignal
+                ? "⏳ 配信開始を待機中... (OBS の開始検出後に YouTube 配信確認)"
+                : "⏳ 配信開始を待機中... (30秒間隔で配信確認)";
+        }
+
+        private static bool IsYouTubeUnauthorized(Exception ex)
+        {
+            return ex is YouTubeApiException apiEx && apiEx.StatusCode == 401;
         }
 
         private void InvalidateTwitchRefreshToken(AppSettings settings, string context)
         {
             if (settings == null)
+            {
                 return;
+            }
 
             if (string.IsNullOrEmpty(settings.RefreshToken))
+            {
                 return;
+            }
 
             settings.RefreshToken = "";
-            _settingsService.SaveSettings(settings);
+            this._settingsService.SaveSettings(settings);
             LogService.Warning($"[{context}] 無効なリフレッシュトークンを検知したため、保存済みリフレッシュトークンをクリアしました");
         }
     }

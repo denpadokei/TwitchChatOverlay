@@ -11,6 +11,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-04-11
+
+### Added
+- MainWindow の設定UIをタブ構成へ移行
+  - `共通` / `Twitch` / `YouTube` の3タブを追加
+  - 各タブを UserControl 化（`CommonSettingsTabView` / `TwitchSettingsTabView` / `YouTubeSettingsTabView`）
+- YouTube API 審査・ポリシー対応文書を追加
+  - 同梱文書として `Docs/PrivacyPolicy.html` / `Docs/TermsOfUse.html` を追加
+  - 審査提出向けの英語版 `Docs/PrivacyPolicy.en.html` / `Docs/TermsOfUse.en.html` を追加
+  - `YOUTUBE_API_REVIEW_SUBMISSION.md` / `YOUTUBE_API_REVIEW_SUBMISSION.ja.md` を追加
+- YouTube OAuth（Authorization Code + PKCE）を新規実装
+  - `Services/YouTubeOAuthService.cs` を追加
+  - ローカルコールバック (`http://127.0.0.1:18765/callback/`) でトークン取得
+  - リフレッシュトークンによるアクセストークン更新メソッドを追加
+- YouTube Live Chat 受信を新規実装
+  - `Services/YouTubeLiveChatService.cs` を追加
+  - `liveBroadcasts` から `liveChatId` を取得（待機時は HTTP ポーリング）
+  - メッセージ受信は gRPC ストリーム（`StreamList`）を使用
+  - `textMessageEvent` / `superChatEvent` / `newSponsorEvent` / `memberMilestoneChatEvent` を `OverlayNotification` にマッピング
+- YouTube Live Chat の重複抑止キャッシュ件数を設定可能に変更
+  - YouTube 設定タブにキャッシュ件数入力欄を追加
+  - 保存設定 `YouTubeMessageCacheSize` を追加
+  - 100以上で任意設定可能、変更時は実行中のサービスにも即時反映
+- BuildSecrets の自動生成を拡張
+  - `BuildSecrets.YouTubeClientId` を追加
+  - `build/Generate-BuildSecrets.ps1` に `YouTubeClientId` パラメータを追加
+  - `TwitchChatOverlay.csproj` に `YouTubeClientId` プロパティとビルド注入を追加
+  - `build/local.props.example` に `YouTubeClientId` 設定を追加
+- OBS WebSocket 連携の基盤を追加
+  - `Services/ObsWebSocketService.cs` を追加
+  - OBS との接続・認証・`StreamStateChanged` イベント監視を実装
+  - `App.xaml.cs` の DI に `ObsWebSocketService` を登録
+- コメント通知音機能を追加
+  - `Services/NotificationSoundService.cs` を追加
+  - コメント受信時に通知音を再生できるよう対応
+  - 埋め込み音源を既定値として追加し、外部音源ファイルの指定にも対応
+  - 対応形式: `wav` / `mp3` / `ogg`
+  - 出力音声デバイス選択と音量調整に対応
+- 設定画面にプレビュー機能を追加
+  - 共通タブに通知音プレビューと表示プレビューを追加
+  - Twitch タブにコメント表示プレビューを追加
+  - YouTube タブにコメント表示プレビューを追加
+- YouTube 認可管理 UI を追加
+  - ポリシー導線、Google 権限管理ページ導線、サポート窓口導線を追加
+  - ローカル保存済み認可情報の削除と Google 側 revoke 操作を追加
+- GitHub Actions の publish 出力検証を追加
+  - `release.yml` と `ci.yml` で Docs 配下の必須文書同梱を検証
+
+### Changed
+- `MainWindow.xaml` の直書き設定UIを削除し、タブ+Regionホスト構成へ変更
+- `ToastNotificationService` を単一ソース購読から複数ソース購読へ変更
+  - Twitch + YouTube の同時購読に対応
+  - プラットフォーム別通知フィルタ（YouTube Chat/Super Chat/Membership）に対応
+- `OverlayNotification` に `SourcePlatform` プロパティを追加
+  - 通知の発生元（Twitch / YouTube）を識別可能に変更
+- `MainWindowViewModel` に YouTube 設定・接続状態・コマンド群を追加
+  - `AuthorizeYouTubeOAuthCommand` / `ConnectYouTubeCommand` / `DisconnectYouTubeCommand`
+  - `SelectedTabIndex` を含むタブ状態の保存・復元に対応
+- YouTube 認可フローに同意ゲートを追加
+  - ポリシー確認用チェックボックスが未チェックの場合は新規認可・手動接続・自動接続を停止
+- `TwitchChatOverlay.csproj` で `Docs/**` を publish 出力へ同梱するよう変更
+- `App.xaml.cs` の DI 登録を拡張
+  - `YouTubeOAuthService` / `YouTubeLiveChatService` の登録
+  - タブViewの `RegisterForNavigation` を追加
+- YouTube 配信待機フローを OBS 連携対応へ拡張
+  - OBS 利用時は配信開始イベントを検出後に 30 秒間隔の配信確認を開始
+  - OBS 未利用時は `ConnectYouTube` 実行時に 1 回だけ即時配信確認し、その後 30 秒間隔の配信待機へ移行
+- YouTube Live Chat 受信経路を REST ポーリングから gRPC ストリーミングへ変更
+  - `Grpc.Net.Client` / `Google.Protobuf` / `Grpc.Tools` を導入
+  - `youtube_live_chat_stream.proto` から gRPC クライアントを生成
+  - `nextPageToken` を利用した gRPC ストリーム再開に対応
+  - 配信終了時は gRPC 切断を検出して待機状態へ戻るよう改善
+- `youtube_live_chat_stream.proto` を完全版スキーマへ更新
+  - YouTube Live Chat の詳細イベント定義、`oneof displayed_content`、補助メッセージ群を追加
+  - 生成される C# API のネスト変更に合わせて `YouTubeLiveChatService` を追従修正
+- YouTube 通信失敗時の再試行戦略を改善
+  - 配信確認は `Retry-After` ヘッダー優先 + ジッター付き指数バックオフ（上限なし）を実装
+  - gRPC ストリーム切断時も指数バックオフで再接続するよう改善
+- 設定暗号化を新フォーマットへ移行
+  - フォーマット識別子（`TCOSET1`）付きの保存形式を導入
+  - Windows DPAPI（CurrentUser）で暗号化保存するよう変更
+  - 旧 AES-CBC 形式設定の自動移行を追加
+- `CommonSettingsTabView` に通知音設定 UI を追加
+  - 通知音 ON/OFF
+  - 埋め込み音源 / ファイル指定の切り替え
+  - 音量スライダー
+  - 出力音声デバイス一覧
+- プレビュー操作時に保存前の設定値をそのまま反映するよう変更
+  - 通知音プレビューで現在の音量・出力デバイス・音源選択を即時反映
+  - コメント表示プレビューで現在のトースト外観設定を確認可能
+- YouTube 設定タブと共通タブのレイアウトを調整
+  - ポリシーボタン群を Grid 化して狭い幅でも見切れにくく改善
+  - ボタン高さとスタイル余白を調整し、文字の縦方向クリップを改善
+
+### Fixed
+- YouTube接続の耐障害性を改善
+  - 401（Unauthorized）時のみトークン更新を試行するよう修正
+  - `YouTubeLiveChatService.ConnectionLost` イベントを追加し、自動再接続フローを実装
+- アプリ終了時のクリーンアップを改善
+  - `MainWindow` クローズ時に YouTube 接続も確実に切断するよう修正
+- 設定I/Oの効率と安全性を改善
+  - `SettingsService` にスレッドセーフなメモリキャッシュを追加
+  - `LoadSettings()` の null 安全化とクローン返却で破壊的変更リスクを低減
+- YouTube 重複通知の抑制を改善
+  - 既読メッセージID管理を全消去方式から固定長キュー方式へ変更
+  - 長時間配信での重複再通知リスクを低減
+  - 既読メッセージキャッシュ件数をユーザー設定化し、配信規模に応じて調整可能に改善
+- 埋め込み MP3 通知音の再生失敗を修正
+  - ID3 タグを持たない埋め込み MP3 でも再生できるよう、ローカルキャッシュへ展開して再生する方式に変更
+- 通知音プレビューで保存前の音量調整が効かない不具合を修正
+- Release / CI publish 成果物に審査用文書が含まれない可能性を検知できない問題を修正
+  - ワークフロー内で同梱ファイルの存在確認を追加
+
+### Docs
+- `README.md` を Twitch + YouTube 対応内容に更新
+  - YouTube OAuth / Live Chat 接続手順を追加
+  - Twitch / YouTube Client ID の詳細取得手順を追加
+  - Google Cloud 側の必須設定（OAuth同意画面・API有効化・loopback URI）を追記
+  - YouTube Live Chat の gRPC ストリーミング受信と配信待機の挙動を追記
+  - YouTube 重複抑止キャッシュ件数の設定項目を追記
+  - 完全版 gRPC proto スキーマへの追従を追記
+  - 通知音設定、プレビュー機能、追加ライブラリの説明を追記
+  - ポリシー文書、同意ゲート、認可削除 / revoke、Release 同梱検証の説明を追記
+
+---
+
 ## [0.3.3] - 2026-04-02
 
 ### Fixed
