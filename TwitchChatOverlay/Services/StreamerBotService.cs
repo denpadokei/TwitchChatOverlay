@@ -165,9 +165,12 @@ namespace TwitchChatOverlay.Services
             }
             catch (Exception ex)
             {
-                LogService.Warning("Streamer.bot WebSocket 受信ループエラー", ex);
-                this.SetConnectionState(false);
-                ConnectionLost?.Invoke(this, EventArgs.Empty);
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    LogService.Warning("Streamer.bot WebSocket 受信ループエラー", ex);
+                    this.SetConnectionState(false);
+                    ConnectionLost?.Invoke(this, EventArgs.Empty);
+                }
                 return;
             }
             finally
