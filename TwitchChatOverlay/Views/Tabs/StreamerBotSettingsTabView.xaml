@@ -1,0 +1,176 @@
+<UserControl x:Class="TwitchChatOverlay.Views.Tabs.StreamerBotSettingsTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:prism="http://prismlibrary.com/"
+             prism:ViewModelLocator.AutoWireViewModel="True"
+             Background="{StaticResource BackgroundBrush}"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:actions="clr-namespace:TwitchChatOverlay.Behaviours">
+    <i:Interaction.Triggers>
+        <i:EventTrigger EventName="Loaded">
+            <actions:LoadedEventBehaviour />
+        </i:EventTrigger>
+    </i:Interaction.Triggers>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="12,12,12,12" VerticalAlignment="Top">
+            <TextBlock Text="Streamer.bot 設定"
+                       FontSize="18" FontWeight="Bold"
+                       Margin="0,0,0,16"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+
+            <!-- 注意書き -->
+            <Border Background="#1A1A2E"
+                    BorderBrush="#9146FF"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="12,8"
+                    Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock Text="⚠ Streamer.bot 連携を有効にすると、このアプリの Twitch/YouTube チャット通知はすべて Streamer.bot 経由で受信します。"
+                               Foreground="#CCCCCC"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="Streamer.bot が Twitch/YouTube に接続し、WebSocket Server（デフォルト: localhost:8080）が有効になっている必要があります。"
+                               Foreground="#AAAAAA"
+                               TextWrapping="Wrap"
+                               FontSize="11"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 有効化 -->
+            <TextBlock Text="🤖 接続設定"
+                       FontSize="13" FontWeight="Bold"
+                       Margin="0,0,0,10"
+                       Foreground="{StaticResource TwitchPurpleBrush}"/>
+
+            <CheckBox Content="Streamer.bot WebSocket 連携を有効化"
+                      IsChecked="{Binding StreamerBotEnabled}"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      Margin="0,0,0,10"/>
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="Host"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding StreamerBotHost, UpdateSourceTrigger=LostFocus}"
+                         IsEnabled="{Binding StreamerBotEnabled}"
+                         Style="{StaticResource StandardTextBoxStyle}"/>
+            </Grid>
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="Port"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding StreamerBotPort, UpdateSourceTrigger=LostFocus}"
+                         IsEnabled="{Binding StreamerBotEnabled}"
+                         Style="{StaticResource StandardTextBoxStyle}"/>
+            </Grid>
+
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="90"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="Password"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Grid.Column="1"
+                         Text="{Binding StreamerBotPassword, UpdateSourceTrigger=LostFocus}"
+                         IsEnabled="{Binding StreamerBotEnabled}"
+                         Style="{StaticResource StandardTextBoxStyle}"/>
+            </Grid>
+
+            <TextBlock Text="認証が不要な場合はパスワードを空白にしてください。"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="11"
+                       Margin="0,2,0,10"/>
+
+            <!-- 接続/切断ボタン -->
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,12">
+                <Button Content="▶ 接続"
+                        Command="{Binding ConnectStreamerBotCommand}"
+                        IsEnabled="{Binding StreamerBotEnabled}"
+                        Height="36"
+                        Padding="20,0"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource PrimaryButtonStyle}"/>
+                <Button Content="■ 切断"
+                        Command="{Binding DisconnectStreamerBotCommand}"
+                        Height="36"
+                        Padding="20,0"
+                        Style="{StaticResource SecondaryButtonStyle}"/>
+            </StackPanel>
+
+            <!-- ステータス -->
+            <Border Background="#0A0A1A"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="10,6"
+                    Margin="0,0,0,16">
+                <TextBlock Text="{Binding StreamerBotStatusMessage}"
+                           Foreground="#CCCCCC"
+                           FontSize="12"
+                           TextWrapping="Wrap"/>
+            </Border>
+
+            <Separator Margin="0,4,0,12" Background="{StaticResource BorderBrush}"/>
+
+            <!-- イベント表示フィルター -->
+            <TextBlock Text="📋 表示フィルター"
+                       FontSize="13" FontWeight="Bold"
+                       Margin="0,0,0,10"
+                       Foreground="{StaticResource TwitchPurpleBrush}"/>
+
+            <TextBlock Text="Twitch"
+                       FontSize="12" FontWeight="Bold"
+                       Margin="0,0,0,6"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+
+            <CheckBox Content="チャットメッセージ"
+                      IsChecked="{Binding ShowStreamerBotTwitchChat}"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      Margin="8,0,0,4"/>
+
+            <CheckBox Content="通知（フォロー/サブスク/レイド/リワード/ハイプトレイン）"
+                      IsChecked="{Binding ShowStreamerBotTwitchNotifications}"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      Margin="8,0,0,12"/>
+
+            <TextBlock Text="YouTube"
+                       FontSize="12" FontWeight="Bold"
+                       Margin="0,0,0,6"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+
+            <CheckBox Content="YouTube イベント（チャット/スーパーチャット/メンバーシップ）"
+                      IsChecked="{Binding ShowStreamerBotYouTube}"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      Margin="8,0,0,12"/>
+
+            <TextBlock Text="Kick"
+                       FontSize="12" FontWeight="Bold"
+                       Margin="0,0,0,6"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+
+            <CheckBox Content="Kick イベント（チャット/フォロー/サブスク）"
+                      IsChecked="{Binding ShowStreamerBotKick}"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      Margin="8,0,0,4"/>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

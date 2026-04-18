@@ -67,6 +67,14 @@ namespace TwitchChatOverlay.Services
         public string ObsWebSocketHost { get; set; } = "127.0.0.1";
         public int ObsWebSocketPort { get; set; } = 4455;
         public string ObsWebSocketPassword { get; set; } = "";
+        public bool StreamerBotEnabled { get; set; } = false;
+        public string StreamerBotHost { get; set; } = "127.0.0.1";
+        public int StreamerBotPort { get; set; } = 8080;
+        public string StreamerBotPassword { get; set; } = "";
+        public bool ShowStreamerBotTwitchChat { get; set; } = true;
+        public bool ShowStreamerBotTwitchNotifications { get; set; } = true;
+        public bool ShowStreamerBotYouTube { get; set; } = true;
+        public bool ShowStreamerBotKick { get; set; } = true;
         public System.Collections.Generic.List<string> RecentChannels { get; set; } = [];
     }
 
