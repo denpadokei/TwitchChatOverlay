@@ -2204,7 +2204,7 @@ namespace TwitchChatOverlay.ViewModels
             try
             {
                 this.StreamerBotStatusMessage = statusPrefix;
-                await this._streamerBotService.ConnectAsync(
+                _ = await this._streamerBotService.ConnectAsync(
                     this.StreamerBotHost,
                     this.StreamerBotPort,
                     this.StreamerBotPassword);
@@ -2269,7 +2269,8 @@ namespace TwitchChatOverlay.ViewModels
             }));
         }
 
-        private void InvalidateTwitchRefreshToken(AppSettings settings, string context)        {
+        private void InvalidateTwitchRefreshToken(AppSettings settings, string context)
+        {
             if (settings == null)
             {
                 return;

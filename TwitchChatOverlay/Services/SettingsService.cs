@@ -103,7 +103,7 @@ namespace TwitchChatOverlay.Services
             {
                 var target = settings ?? new AppSettings();
                 // 暗号化はロック外で実行（時間がかかる可能性があるため）
-                var payload = ComputeEncryptedPayload(target);
+                var payload = this.ComputeEncryptedPayload(target);
                 lock (this._sync)
                 {
                     File.WriteAllBytes(this._settingsPath, payload);
@@ -151,7 +151,7 @@ namespace TwitchChatOverlay.Services
                         // レガシー形式から移行: ロック内で直接書き込み（SaveSettings の再入を回避）
                         try
                         {
-                            var migratedPayload = ComputeEncryptedPayload(loaded);
+                            var migratedPayload = this.ComputeEncryptedPayload(loaded);
                             File.WriteAllBytes(this._settingsPath, migratedPayload);
                         }
                         catch (Exception ex)

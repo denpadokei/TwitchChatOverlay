@@ -1,6 +1,5 @@
 using Newtonsoft.Json.Linq;
 using System;
-using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -143,7 +142,7 @@ namespace TwitchChatOverlay.Services
                         break;
                     }
 
-                    messageBuilder.Clear();
+                    _ = messageBuilder.Clear();
                     WebSocketReceiveResult result;
 
                     do
@@ -388,12 +387,7 @@ namespace TwitchChatOverlay.Services
         private static string BuildSubText(JToken data)
         {
             var months = data?["cumulative_months"]?.ToString();
-            if (!string.IsNullOrEmpty(months) && months != "0" && months != "1")
-            {
-                return $"累計 {months} ヶ月";
-            }
-
-            return "サブスクリプションありがとうございます！";
+            return !string.IsNullOrEmpty(months) && months != "0" && months != "1" ? $"累計 {months} ヶ月" : "サブスクリプションありがとうございます！";
         }
 
         private static JObject BuildSubscribeRequest()
