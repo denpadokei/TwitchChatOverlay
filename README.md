@@ -265,16 +265,7 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 
 ### Streamer.bot 設定
 
-| キー | 説明 | 既定値 |
-|------|------|--------|
-| `StreamerBotEnabled` | Streamer.bot 連携を有効化するか | `false` |
-| `StreamerBotHost` | WebSocket Server のホスト | `127.0.0.1` |
-| `StreamerBotPort` | WebSocket Server のポート | `8080` |
-| `StreamerBotPassword` | WebSocket Server のパスワード | 空文字 |
-| `ShowStreamerBotTwitchChat` | Twitch チャットを表示するか | `true` |
-| `ShowStreamerBotTwitchNotifications` | Twitch 通知を表示するか | `true` |
-| `ShowStreamerBotYouTube` | YouTube イベントを表示するか | `true` |
-| `ShowStreamerBotKick` | Kick イベントを表示するか | `true` |
+Streamer.bot 連携の設定キー一覧は、上記の **「6. Streamer.bot 連携設定（任意）」** を参照してください。
 
 ## 設定項目
 

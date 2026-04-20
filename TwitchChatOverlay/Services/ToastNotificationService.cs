@@ -119,11 +119,7 @@ namespace TwitchChatOverlay.Services
 
             // Kick イベントのフィルタリング
             return isKick
-                ? notification.Type switch
-                {
-                    NotificationType.Chat => settings.ShowStreamerBotKick,
-                    _ => settings.ShowStreamerBotKick && settings.ShowStreamerBotTwitchNotifications,
-                }
+                ? settings.ShowStreamerBotKick
                 : notification.Type switch
                 {
                     NotificationType.Chat => isYouTube ? settings.ShowYouTubeChat || settings.ShowStreamerBotYouTube : settings.ShowStreamerBotTwitchChat,
