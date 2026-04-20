@@ -54,10 +54,11 @@ namespace TwitchChatOverlay.Services
             this._notificationSoundService = notificationSoundService;
         }
 
-        public void Initialize(TwitchEventSubService twitchEventSubService, YouTubeLiveChatService youTubeLiveChatService)
+        public void Initialize(TwitchEventSubService twitchEventSubService, YouTubeLiveChatService youTubeLiveChatService, StreamerBotService streamerBotService)
         {
             twitchEventSubService.NotificationReceived += this.OnNotificationReceived;
             youTubeLiveChatService.NotificationReceived += this.OnNotificationReceived;
+            streamerBotService.NotificationReceived += this.OnNotificationReceived;
         }
 
         public void ShowPreviewNotification(OverlayNotification notification)
@@ -112,21 +113,26 @@ namespace TwitchChatOverlay.Services
         private bool ShouldShow(OverlayNotification notification)
         {
             var settings = this._settingsService.LoadSettings();
-            var isYouTube = string.Equals(notification.SourcePlatform, "YouTube", StringComparison.OrdinalIgnoreCase);
+            var platform = notification.SourcePlatform ?? "";
+            var isYouTube = string.Equals(platform, "YouTube", StringComparison.OrdinalIgnoreCase);
+            var isKick = string.Equals(platform, "Kick", StringComparison.OrdinalIgnoreCase);
 
-            return notification.Type switch
-            {
-                NotificationType.Chat => !isYouTube || settings.ShowYouTubeChat,
-                NotificationType.Reward => isYouTube ? settings.ShowYouTubeSuperChat : settings.ShowReward,
-                NotificationType.Raid => settings.ShowRaid,
-                NotificationType.Follow => settings.ShowFollow,
-                NotificationType.Subscribe => isYouTube ? settings.ShowYouTubeMembership : settings.ShowSubscribe,
-                NotificationType.GiftSubscribe => settings.ShowGiftSubscribe,
-                NotificationType.Resub => settings.ShowResub,
-                NotificationType.HypeTrainBegin => settings.ShowHypeTrainBegin,
-                NotificationType.HypeTrainEnd => settings.ShowHypeTrainEnd,
-                _ => true
-            };
+            // Kick イベントのフィルタリング
+            return isKick
+                ? settings.ShowStreamerBotKick
+                : notification.Type switch
+                {
+                    NotificationType.Chat => isYouTube ? settings.ShowYouTubeChat || settings.ShowStreamerBotYouTube : settings.ShowStreamerBotTwitchChat,
+                    NotificationType.Reward => isYouTube ? settings.ShowYouTubeSuperChat || settings.ShowStreamerBotYouTube : settings.ShowReward && settings.ShowStreamerBotTwitchNotifications,
+                    NotificationType.Raid => settings.ShowRaid && settings.ShowStreamerBotTwitchNotifications,
+                    NotificationType.Follow => settings.ShowFollow && settings.ShowStreamerBotTwitchNotifications,
+                    NotificationType.Subscribe => isYouTube ? settings.ShowYouTubeMembership || settings.ShowStreamerBotYouTube : settings.ShowSubscribe && settings.ShowStreamerBotTwitchNotifications,
+                    NotificationType.GiftSubscribe => settings.ShowGiftSubscribe && settings.ShowStreamerBotTwitchNotifications,
+                    NotificationType.Resub => settings.ShowResub && settings.ShowStreamerBotTwitchNotifications,
+                    NotificationType.HypeTrainBegin => settings.ShowHypeTrainBegin && settings.ShowStreamerBotTwitchNotifications,
+                    NotificationType.HypeTrainEnd => settings.ShowHypeTrainEnd && settings.ShowStreamerBotTwitchNotifications,
+                    _ => true
+                };
         }
 
         private void ShowToast(OverlayNotification notification)

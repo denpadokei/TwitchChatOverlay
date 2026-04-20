@@ -67,6 +67,14 @@ namespace TwitchChatOverlay.Services
         public string ObsWebSocketHost { get; set; } = "127.0.0.1";
         public int ObsWebSocketPort { get; set; } = 4455;
         public string ObsWebSocketPassword { get; set; } = "";
+        public bool StreamerBotEnabled { get; set; } = false;
+        public string StreamerBotHost { get; set; } = "127.0.0.1";
+        public int StreamerBotPort { get; set; } = 8080;
+        public string StreamerBotPassword { get; set; } = "";
+        public bool ShowStreamerBotTwitchChat { get; set; } = true;
+        public bool ShowStreamerBotTwitchNotifications { get; set; } = true;
+        public bool ShowStreamerBotYouTube { get; set; } = true;
+        public bool ShowStreamerBotKick { get; set; } = true;
         public System.Collections.Generic.List<string> RecentChannels { get; set; } = [];
     }
 
@@ -95,7 +103,7 @@ namespace TwitchChatOverlay.Services
             {
                 var target = settings ?? new AppSettings();
                 // 暗号化はロック外で実行（時間がかかる可能性があるため）
-                var payload = ComputeEncryptedPayload(target);
+                var payload = this.ComputeEncryptedPayload(target);
                 lock (this._sync)
                 {
                     File.WriteAllBytes(this._settingsPath, payload);
@@ -143,7 +151,7 @@ namespace TwitchChatOverlay.Services
                         // レガシー形式から移行: ロック内で直接書き込み（SaveSettings の再入を回避）
                         try
                         {
-                            var migratedPayload = ComputeEncryptedPayload(loaded);
+                            var migratedPayload = this.ComputeEncryptedPayload(loaded);
                             File.WriteAllBytes(this._settingsPath, migratedPayload);
                         }
                         catch (Exception ex)

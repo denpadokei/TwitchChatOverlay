@@ -72,10 +72,12 @@ namespace TwitchChatOverlay
             _ = containerRegistry.RegisterSingleton<ObsWebSocketService>();
             _ = containerRegistry.RegisterInstance<YouTubeOAuthService>(new YouTubeOAuthService(BuildSecrets.YouTubeClientSecret));
             _ = containerRegistry.RegisterSingleton<YouTubeLiveChatService>();
+            _ = containerRegistry.RegisterSingleton<StreamerBotService>();
             _ = containerRegistry.RegisterSingleton<MainWindowViewModel>();
             _ = containerRegistry.Register<CommonSettingsTabViewModel>();
             _ = containerRegistry.Register<TwitchSettingsTabViewModel>();
             _ = containerRegistry.Register<YouTubeSettingsTabViewModel>();
+            _ = containerRegistry.Register<StreamerBotSettingsTabViewModel>();
         }
     }
 }
