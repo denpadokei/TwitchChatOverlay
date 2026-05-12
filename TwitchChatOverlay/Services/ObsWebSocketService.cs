@@ -1,7 +1,7 @@
 using Newtonsoft.Json.Linq;
 using System;
-using System.Net.WebSockets;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -267,29 +267,23 @@ namespace TwitchChatOverlay.Services
             }
 
             var socketException = FindSocketException(ex);
-            if (socketException != null && IsRetryableSocketError(socketException.SocketErrorCode))
-            {
-                return new ObsConnectionResult
+            return socketException != null && IsRetryableSocketError(socketException.SocketErrorCode)
+                ? new ObsConnectionResult
                 {
                     FailureReason = ObsConnectionFailureReason.Unavailable,
                     Message = "OBS が見つかりません。10 秒後に再試行します。",
-                };
-            }
-
-            if (ex is OperationCanceledException)
-            {
-                return new ObsConnectionResult
+                }
+                : ex is OperationCanceledException
+                ? new ObsConnectionResult
                 {
                     FailureReason = ObsConnectionFailureReason.Unknown,
                     Message = "OBS 接続がキャンセルされました。",
+                }
+                : new ObsConnectionResult
+                {
+                    FailureReason = ObsConnectionFailureReason.Unknown,
+                    Message = $"OBS接続エラー: {ex.Message}",
                 };
-            }
-
-            return new ObsConnectionResult
-            {
-                FailureReason = ObsConnectionFailureReason.Unknown,
-                Message = $"OBS接続エラー: {ex.Message}",
-            };
         }
 
         private static Exception CreateCloseException(WebSocketCloseStatus? closeStatus, string closeDescription)

@@ -74,7 +74,6 @@ namespace TwitchChatOverlay.Services
         private string _liveChatId;
         private string _resumePageToken;
         private bool _broadcastPollingPending;
-        private int _messageCacheSize = DefaultMessageCacheSize;
 
         public event EventHandler<OverlayNotification> NotificationReceived;
         public event EventHandler<YouTubeConnectionLostEventArgs> ConnectionLost;
@@ -86,13 +85,13 @@ namespace TwitchChatOverlay.Services
 
         public int MessageCacheSize
         {
-            get => this._messageCacheSize;
+            get;
             set
             {
-                this._messageCacheSize = Math.Max(value, MinMessageCacheSize);
+                field = Math.Max(value, MinMessageCacheSize);
                 this.TrimSeenMessageCache();
             }
-        }
+        } = DefaultMessageCacheSize;
 
         public Task ConnectAsync(string accessToken)
         {
@@ -525,7 +524,7 @@ namespace TwitchChatOverlay.Services
 
         private void TrimSeenMessageCache()
         {
-            while (this._seenMessageOrder.Count > this._messageCacheSize)
+            while (this._seenMessageOrder.Count > this.MessageCacheSize)
             {
                 var oldId = this._seenMessageOrder.Dequeue();
                 _ = this._seenMessageIds.Remove(oldId);

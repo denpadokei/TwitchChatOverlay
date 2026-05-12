@@ -68,6 +68,7 @@ namespace TwitchChatOverlay.ViewModels
         private readonly YouTubeOAuthService _youTubeOAuthService;
         private readonly YouTubeLiveChatService _youTubeLiveChatService;
         private readonly ObsWebSocketService _obsWebSocketService;
+        private readonly StreamerBotService _streamerBotService;
         private Timer _tokenRefreshTimer;
         private Timer _youtubeTokenRefreshTimer;
         private Timer _obsReconnectTimer;
@@ -454,6 +455,71 @@ namespace TwitchChatOverlay.ViewModels
             set => this.SetProperty(ref field, value);
         } = "OBS連携は無効です";
 
+        public bool StreamerBotEnabled
+        {
+            get;
+            set
+            {
+                if (this.SetProperty(ref field, value))
+                {
+                    this.UpdateStreamerBotStatusMessage();
+                    this.RaiseStreamerBotCommandStateChanged();
+                }
+            }
+        }
+
+        public string StreamerBotHost
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "127.0.0.1";
+
+        public int StreamerBotPort
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = 8080;
+
+        public string StreamerBotPassword
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "";
+
+        public string StreamerBotStatusMessage
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = "Streamer.bot連携は無効です";
+
+        public bool ShowStreamerBotTwitchChat
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public bool ShowStreamerBotTwitchNotifications
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public bool ShowStreamerBotYouTube
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public bool ShowStreamerBotKick
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        } = true;
+
+        public ICommand ConnectStreamerBotCommand { get; }
+
+        public ICommand DisconnectStreamerBotCommand { get; }
+
         public MainWindowViewModel(
             SettingsService settingsService,
             TwitchApiService apiService,
@@ -463,7 +529,8 @@ namespace TwitchChatOverlay.ViewModels
             NotificationSoundService notificationSoundService,
             YouTubeOAuthService youTubeOAuthService,
             YouTubeLiveChatService youTubeLiveChatService,
-            ObsWebSocketService obsWebSocketService)
+            ObsWebSocketService obsWebSocketService,
+            StreamerBotService streamerBotService)
         {
             this._settingsService = settingsService;
             this._apiService = apiService;
@@ -474,6 +541,7 @@ namespace TwitchChatOverlay.ViewModels
             this._youTubeOAuthService = youTubeOAuthService;
             this._youTubeLiveChatService = youTubeLiveChatService;
             this._obsWebSocketService = obsWebSocketService;
+            this._streamerBotService = streamerBotService;
 
             this.ConnectCommand = new DelegateCommand(this.Connect, this.CanConnect);
             this.DisconnectCommand = new DelegateCommand(this.Disconnect, this.CanDisconnect);
@@ -501,6 +569,10 @@ namespace TwitchChatOverlay.ViewModels
                 .ObservesProperty(() => this.ObsWebSocketEnabled);
             this.DisconnectObsCommand = new DelegateCommand(this.DisconnectObs, this.CanDisconnectObs)
                 .ObservesProperty(() => this.ObsWebSocketEnabled);
+            this.ConnectStreamerBotCommand = new DelegateCommand(this.ConnectStreamerBot, this.CanConnectStreamerBot)
+                .ObservesProperty(() => this.StreamerBotEnabled);
+            this.DisconnectStreamerBotCommand = new DelegateCommand(this.DisconnectStreamerBot, this.CanDisconnectStreamerBot)
+                .ObservesProperty(() => this.StreamerBotEnabled);
             this.OpenPrivacyPolicyCommand = new DelegateCommand(this.OpenPrivacyPolicy);
             this.OpenTermsOfUseCommand = new DelegateCommand(this.OpenTermsOfUse);
             this.OpenYouTubeTermsCommand = new DelegateCommand(this.OpenYouTubeTerms);
@@ -510,7 +582,7 @@ namespace TwitchChatOverlay.ViewModels
             this.ClearYouTubeAuthorizationCommand = new DelegateCommand(this.ClearYouTubeAuthorization);
             this.RevokeYouTubeAuthorizationCommand = new DelegateCommand(this.RevokeYouTubeAuthorization);
 
-            this._toastService.Initialize(this._eventSubService, this._youTubeLiveChatService);
+            this._toastService.Initialize(this._eventSubService, this._youTubeLiveChatService, this._streamerBotService);
 
             // 予期しない切断（トークン期限切れ等）時に自動再接続
             this._eventSubService.ConnectionLost += this.OnConnectionLost;
@@ -520,6 +592,8 @@ namespace TwitchChatOverlay.ViewModels
             this._youTubeLiveChatService.BroadcastEnded += this.OnYouTubeBroadcastEnded;
             this._obsWebSocketService.ConnectionStateChanged += this.OnObsConnectionStateChanged;
             this._obsWebSocketService.StreamingStateChanged += this.OnObsStreamingStateChanged;
+            this._streamerBotService.ConnectionStateChanged += this.OnStreamerBotConnectionStateChanged;
+            this._streamerBotService.ConnectionLost += this.OnStreamerBotConnectionLost;
 
             // モニター一覧を構築
             var screens = WinForms.Screen.AllScreens;
@@ -534,6 +608,7 @@ namespace TwitchChatOverlay.ViewModels
 
             this.LoadSettings();
             _ = this.AutoConnectObsAsync();
+            _ = this.AutoConnectStreamerBotAsync();
             _ = this.ValidateSavedTokenAsync();
             _ = this.AutoConnectYouTubeAsync();
             _ = this.CheckForUpdateAsync();
@@ -1315,6 +1390,14 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ObsWebSocketHost = this.ObsWebSocketHost;
                 settings.ObsWebSocketPort = this.ObsWebSocketPort;
                 settings.ObsWebSocketPassword = this.ObsWebSocketPassword;
+                settings.StreamerBotEnabled = this.StreamerBotEnabled;
+                settings.StreamerBotHost = this.StreamerBotHost;
+                settings.StreamerBotPort = this.StreamerBotPort;
+                settings.StreamerBotPassword = this.StreamerBotPassword;
+                settings.ShowStreamerBotTwitchChat = this.ShowStreamerBotTwitchChat;
+                settings.ShowStreamerBotTwitchNotifications = this.ShowStreamerBotTwitchNotifications;
+                settings.ShowStreamerBotYouTube = this.ShowStreamerBotYouTube;
+                settings.ShowStreamerBotKick = this.ShowStreamerBotKick;
                 settings.ToastDurationSeconds = this.ToastDurationSeconds;
                 settings.ToastMaxCount = this.ToastMaxCount;
                 settings.ToastPosition = (Services.ToastPosition)this.ToastPositionIndex;
@@ -1380,6 +1463,15 @@ namespace TwitchChatOverlay.ViewModels
                 this.ObsWebSocketPort = settings.ObsWebSocketPort > 0 ? settings.ObsWebSocketPort : 4455;
                 this.ObsWebSocketPassword = settings.ObsWebSocketPassword ?? "";
                 this.UpdateObsStatusMessage();
+                this.StreamerBotEnabled = settings.StreamerBotEnabled;
+                this.StreamerBotHost = string.IsNullOrWhiteSpace(settings.StreamerBotHost) ? "127.0.0.1" : settings.StreamerBotHost;
+                this.StreamerBotPort = settings.StreamerBotPort > 0 ? settings.StreamerBotPort : 8080;
+                this.StreamerBotPassword = settings.StreamerBotPassword ?? "";
+                this.ShowStreamerBotTwitchChat = settings.ShowStreamerBotTwitchChat;
+                this.ShowStreamerBotTwitchNotifications = settings.ShowStreamerBotTwitchNotifications;
+                this.ShowStreamerBotYouTube = settings.ShowStreamerBotYouTube;
+                this.ShowStreamerBotKick = settings.ShowStreamerBotKick;
+                this.UpdateStreamerBotStatusMessage();
                 this.ToastDurationSeconds = settings.ToastDurationSeconds > 0 ? settings.ToastDurationSeconds : 5;
                 this.ToastMaxCount = settings.ToastMaxCount > 0 ? settings.ToastMaxCount : 5;
                 this.ToastPositionIndex = (int)settings.ToastPosition;
@@ -2077,6 +2169,104 @@ namespace TwitchChatOverlay.ViewModels
         private static bool IsYouTubeUnauthorized(Exception ex)
         {
             return ex is YouTubeApiException apiEx && apiEx.StatusCode == 401;
+        }
+
+        private bool CanConnectStreamerBot()
+        {
+            return this.StreamerBotEnabled && !this._streamerBotService.IsConnected;
+        }
+
+        private bool CanDisconnectStreamerBot()
+        {
+            return this._streamerBotService.IsConnected;
+        }
+
+        private async void ConnectStreamerBot()
+        {
+            await this.TryConnectStreamerBotAsync(statusPrefix: "Streamer.bot に接続中...");
+        }
+
+        private void DisconnectStreamerBot()
+        {
+            this._streamerBotService.Disconnect();
+            this.StreamerBotStatusMessage = "Streamer.bot 接続を切断しました";
+            this.RaiseStreamerBotCommandStateChanged();
+        }
+
+        private async Task TryConnectStreamerBotAsync(string statusPrefix)
+        {
+            if (!this.StreamerBotEnabled)
+            {
+                this.UpdateStreamerBotStatusMessage();
+                return;
+            }
+
+            try
+            {
+                this.StreamerBotStatusMessage = statusPrefix;
+                _ = await this._streamerBotService.ConnectAsync(
+                    this.StreamerBotHost,
+                    this.StreamerBotPort,
+                    this.StreamerBotPassword);
+                this.UpdateStreamerBotStatusMessage();
+            }
+            catch (Exception ex)
+            {
+                LogService.Warning("Streamer.bot 接続失敗", ex);
+                this.StreamerBotStatusMessage = $"Streamer.bot 接続エラー: {ex.Message}";
+            }
+            finally
+            {
+                this.RaiseStreamerBotCommandStateChanged();
+            }
+        }
+
+        private async Task AutoConnectStreamerBotAsync()
+        {
+            if (!this.StreamerBotEnabled)
+            {
+                this.UpdateStreamerBotStatusMessage();
+                return;
+            }
+
+            await this.TryConnectStreamerBotAsync(statusPrefix: "起動時に Streamer.bot へ接続中...");
+        }
+
+        private void UpdateStreamerBotStatusMessage()
+        {
+            if (!this.StreamerBotEnabled)
+            {
+                this.StreamerBotStatusMessage = "Streamer.bot連携は無効です";
+                return;
+            }
+
+            this.StreamerBotStatusMessage = this._streamerBotService.IsConnected
+                ? "✅ Streamer.bot 接続中"
+                : "Streamer.bot 未接続";
+        }
+
+        private void RaiseStreamerBotCommandStateChanged()
+        {
+            ((DelegateCommand)this.ConnectStreamerBotCommand).RaiseCanExecuteChanged();
+            ((DelegateCommand)this.DisconnectStreamerBotCommand).RaiseCanExecuteChanged();
+        }
+
+        private void OnStreamerBotConnectionStateChanged(object sender, EventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.UpdateStreamerBotStatusMessage();
+                this.RaiseStreamerBotCommandStateChanged();
+            }));
+        }
+
+        private void OnStreamerBotConnectionLost(object sender, EventArgs e)
+        {
+            _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
+            {
+                this.StreamerBotStatusMessage = "Streamer.bot との接続が切れました";
+                this.RaiseStreamerBotCommandStateChanged();
+            }));
         }
 
         private void InvalidateTwitchRefreshToken(AppSettings settings, string context)

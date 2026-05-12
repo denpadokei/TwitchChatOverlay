@@ -11,6 +11,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-04-18
+
+### Added
+- **Streamer.bot WebSocket 連携を新規追加**
+  - `Services/StreamerBotService.cs` を追加
+  - Streamer.bot の WebSocket Server（デフォルト: `ws://127.0.0.1:8080/`）への接続・認証・イベント受信を実装
+  - 認証は OBS WebSocket と同じ SHA-256 アルゴリズム（`base64(SHA256(base64(SHA256(password+salt)) + challenge))`）
+  - Hello / Subscribe / Authenticate のハンドシェイクを実装
+  - 購読対象イベント:
+    - **Twitch**: ChatMessage, Follow, Sub, ReSub, GiftSub, GiftBomb, Raid, RewardRedemption, HypeTrainStart, HypeTrainEnd
+    - **YouTube**: Message, SuperChat, NewSponsor, MembershipGift
+    - **Kick**: ChatMessage, Follow, Subscription, GiftSubscription, Resubscription
+  - 各イベントを `OverlayNotification` にマッピングして既存のトースト通知フローへ統合
+  - 公開イベント: `NotificationReceived` / `ConnectionStateChanged` / `ConnectionLost`
+- Streamer.bot 設定タブを追加
+  - `Views/Tabs/StreamerBotSettingsTabView.xaml` を追加
+  - `ViewModels/StreamerBotSettingsTabViewModel.cs` を追加
+  - Host / Port / Password 入力、接続 / 切断ボタン、ステータス表示、フィルターチェックボックスを実装
+  - フィルター: Twitch チャット / Twitch 通知 / YouTube / Kick を個別 ON/OFF 可能
+- Streamer.bot 用設定項目を `AppSettings` に追加
+  - `StreamerBotEnabled` / `StreamerBotHost` / `StreamerBotPort` / `StreamerBotPassword`
+  - `ShowStreamerBotTwitchChat` / `ShowStreamerBotTwitchNotifications` / `ShowStreamerBotYouTube` / `ShowStreamerBotKick`
+- `OverlayNotification.SourcePlatform` に `Kick` を追加
+
+### Changed
+- `ToastNotificationService.Initialize()` に `StreamerBotService` を追加し、Kick イベントを含む3プラットフォームを同時購読
+- `ToastNotificationService.ShouldShow()` に Kick フィルターと Streamer.bot フィルターの判定を追加
+- `MainWindowViewModel` に Streamer.bot 接続状態管理・コマンド群を追加
+  - `ConnectStreamerBotCommand` / `DisconnectStreamerBotCommand`
+  - 起動時に `StreamerBotEnabled=true` の場合は自動接続
+- `App.xaml.cs` の DI 登録を拡張
+  - `StreamerBotService` を `RegisterSingleton` で追加
+  - `StreamerBotSettingsTabViewModel` を `Register` で追加
+- `MainWindow.xaml` に `Streamer.bot` タブを追加（YouTube タブの後）
+
+---
+
 ## [0.4.0] - 2026-04-11
 
 ### Added

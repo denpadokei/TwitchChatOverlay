@@ -2,9 +2,9 @@ using System.Windows.Controls;
 
 namespace TwitchChatOverlay.Views.Tabs
 {
-    public partial class YouTubeSettingsTabView : UserControl
+    public partial class StreamerBotSettingsTabView : UserControl
     {
-        public YouTubeSettingsTabView()
+        public StreamerBotSettingsTabView()
         {
             this.InitializeComponent();
         }
