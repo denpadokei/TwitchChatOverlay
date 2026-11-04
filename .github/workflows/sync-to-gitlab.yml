@@ -3,12 +3,17 @@ name: Sync to GitLab
 on:
   push
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
       - name: Sync to GitLab
-        uses: kujov/gitlab-sync@main
+        # サプライチェーン対策: 可変ブランチではなくフルコミット SHA に固定する。
+        # 更新する場合は Dependabot 等で SHA を差し替えること。
+        uses: kujov/gitlab-sync@311f54eeafe287d1e336b226fbf59e2a0217302e # main (2026-04-09)
         with:
           gitlab_url: ${{ secrets.GITLAB_URL }}
           username: ${{ secrets.USERNAME }}

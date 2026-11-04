@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using System;
+using System.Net;
 using System.Net.WebSockets;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -56,7 +57,7 @@ namespace TwitchChatOverlay.Services
         public event EventHandler ConnectionStateChanged;
         public event EventHandler<ObsStreamingStateChangedEventArgs> StreamingStateChanged;
 
-        public async Task<ObsConnectionResult> ConnectAsync(string host, int port, string password, CancellationToken cancellationToken = default)
+        public async Task<ObsConnectionResult> ConnectAsync(string host, int port, string password, bool useTls = false, CancellationToken cancellationToken = default)
         {
             await this._connectLock.WaitAsync(cancellationToken);
             try
@@ -70,9 +71,10 @@ namespace TwitchChatOverlay.Services
                 this._cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 this._webSocket = new ClientWebSocket();
 
-                var targetHost = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host;
+                var targetHost = string.IsNullOrWhiteSpace(host) ? "127.0.0.1" : host.Trim();
                 var targetPort = port > 0 ? port : 4455;
-                await this._webSocket.ConnectAsync(new Uri($"ws://{targetHost}:{targetPort}"), this._cts.Token);
+                var targetUri = BuildEndpointUri(targetHost, targetPort, useTls);
+                await this._webSocket.ConnectAsync(targetUri, this._cts.Token);
 
                 var hello = await ReceiveJsonAsync(this._webSocket, this._cts.Token);
                 var op = hello["op"]?.Value<int>() ?? -1;
@@ -253,6 +255,48 @@ namespace TwitchChatOverlay.Services
             var secret = Convert.ToBase64String(secretHash);
             var authHash = SHA256.HashData(Encoding.UTF8.GetBytes(secret + challenge));
             return Convert.ToBase64String(authHash);
+        }
+
+        /// <summary>
+        /// 接続先 URI を組み立てる。ホスト文字列の細工を拒否し、非ループバックでは TLS を必須にする。
+        /// </summary>
+        private static Uri BuildEndpointUri(string host, int port, bool useTls)
+        {
+            foreach (var invalid in new[] { "://", "/", "\\", "@", "?", "#" })
+            {
+                if (host.Contains(invalid, StringComparison.Ordinal))
+                {
+                    throw new ObsConnectionException(
+                        ObsConnectionFailureReason.ConfigurationError,
+                        "OBS のホストにはホスト名または IP アドレスのみを指定してください。");
+                }
+            }
+
+            if (Uri.CheckHostName(host) == UriHostNameType.Unknown)
+            {
+                throw new ObsConnectionException(
+                    ObsConnectionFailureReason.ConfigurationError,
+                    $"OBS のホスト名が不正です: {host}");
+            }
+
+            if (!useTls && !IsLoopbackHost(host))
+            {
+                throw new ObsConnectionException(
+                    ObsConnectionFailureReason.ConfigurationError,
+                    "リモートの OBS へ接続するには TLS (wss://) を有効にしてください。平文接続は 127.0.0.1 / localhost のみ許可されています。");
+            }
+
+            return new UriBuilder(useTls ? "wss" : "ws", host, port) { Path = "/" }.Uri;
+        }
+
+        private static bool IsLoopbackHost(string host)
+        {
+            if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
         }
 
         private static ObsConnectionResult CreateFailureResult(Exception ex)

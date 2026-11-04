@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 clientsecret.txt
 build/local.props
+
+# ビルド済み成果物（リポジトリに含めない）
+publish-check/

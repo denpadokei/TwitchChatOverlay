@@ -27,6 +27,7 @@ namespace TwitchChatOverlay.ViewModels
                 nameof(ObsWebSocketEnabled),
                 nameof(ObsWebSocketHost),
                 nameof(ObsWebSocketPort),
+                nameof(ObsWebSocketUseTls),
                 nameof(ObsWebSocketPassword),
                 nameof(ConnectObsCommand),
                 nameof(DisconnectObsCommand),
@@ -107,6 +108,12 @@ namespace TwitchChatOverlay.ViewModels
         {
             get => this.MainWindowViewModel.ObsWebSocketPort;
             set => this.MainWindowViewModel.ObsWebSocketPort = value;
+        }
+
+        public bool ObsWebSocketUseTls
+        {
+            get => this.MainWindowViewModel.ObsWebSocketUseTls;
+            set => this.MainWindowViewModel.ObsWebSocketUseTls = value;
         }
 
         public string ObsWebSocketPassword
