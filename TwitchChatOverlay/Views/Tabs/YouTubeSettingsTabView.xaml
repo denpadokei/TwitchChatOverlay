@@ -259,6 +259,12 @@
                          IsEnabled="{Binding ObsWebSocketEnabled}"/>
             </Grid>
 
+            <CheckBox Content="TLS (wss://) を使用（リモート接続では必須）"
+                      IsChecked="{Binding ObsWebSocketUseTls}"
+                      IsEnabled="{Binding ObsWebSocketEnabled}"
+                      Foreground="{StaticResource TextPrimaryBrush}"
+                      Margin="0,0,0,8"/>
+
             <Grid Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="90"/>

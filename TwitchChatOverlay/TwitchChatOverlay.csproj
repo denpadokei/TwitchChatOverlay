@@ -3,7 +3,8 @@
   <Import Project="..\build\local.props" Condition="Exists('..\build\local.props')" />
 
   <PropertyGroup>
-    <!-- ビルド時にGitHub Actionsから注入されるシークレット。ローカルビルド時は空文字。 -->
+    <!-- ビルド時にGitHub Actionsから注入される公開クライアントID。ローカルビルド時は空文字。
+         BuildSecrets は難読化のみで暗号化ではない（埋め込み値は公開情報）。 -->
     <TwitchClientId Condition="'$(TwitchClientId)' == ''"></TwitchClientId>
     <YouTubeClientId Condition="'$(YouTubeClientId)' == ''"></YouTubeClientId>
     <YouTubeClientSecret Condition="'$(YouTubeClientSecret)' == ''"></YouTubeClientSecret>
@@ -13,9 +14,9 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>0.4.0</Version>
-    <AssemblyVersion>0.4.0.0</AssemblyVersion>
-    <FileVersion>0.4.0.0</FileVersion>
+    <Version>0.4.1</Version>
+    <AssemblyVersion>0.4.1.0</AssemblyVersion>
+    <FileVersion>0.4.1.0</FileVersion>
     <AssemblyTitle>TwitchChatOverlay</AssemblyTitle>
     <Company>denpadokei</Company>
     <Product>TwitchChatOverlay</Product>
@@ -61,7 +62,10 @@
       <!-- GetFullPath でトレイリングスラッシュを除去（バックスラッシュがクォートをエスケープするのを防ぐ） -->
       <_BuildSecretsOut>$([System.IO.Path]::GetFullPath('$(IntermediateOutputPath)'))</_BuildSecretsOut>
     </PropertyGroup>
-    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BuildSecretsScript)&quot; -ClientId &quot;$(TwitchClientId)&quot; -YouTubeClientId &quot;$(YouTubeClientId)&quot; -YouTubeClientSecret &quot;$(YouTubeClientSecret)&quot; -OutPath &quot;$(_BuildSecretsOut)&quot;" />
+    <!-- シークレットはコマンドライン引数ではなく環境変数で渡す（プロセス引数・ビルドログへの露出を避ける）。
+         値に ';' を含めると EnvironmentVariables の区切りと衝突するため、ClientId/Secret は英数字のみを前提とする。 -->
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_BuildSecretsScript)&quot; -OutPath &quot;$(_BuildSecretsOut)&quot;"
+          EnvironmentVariables="TCS_TWITCH_CLIENT_ID=$(TwitchClientId);TCS_YOUTUBE_CLIENT_ID=$(YouTubeClientId);TCS_YOUTUBE_CLIENT_SECRET=$(YouTubeClientSecret)" />
     <ItemGroup>
       <Compile Include="$(_BuildSecretsOut)\BuildSecrets.g.cs" />
     </ItemGroup>

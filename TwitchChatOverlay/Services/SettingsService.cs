@@ -66,6 +66,8 @@ namespace TwitchChatOverlay.Services
         public bool ObsWebSocketEnabled { get; set; } = false;
         public string ObsWebSocketHost { get; set; } = "127.0.0.1";
         public int ObsWebSocketPort { get; set; } = 4455;
+        /// <summary>true のとき wss:// で接続する。非ループバックホストでは必須。</summary>
+        public bool ObsWebSocketUseTls { get; set; } = false;
         public string ObsWebSocketPassword { get; set; } = "";
         public System.Collections.Generic.List<string> RecentChannels { get; set; } = [];
     }

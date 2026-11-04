@@ -1,13 +1,19 @@
 <#
 .SYNOPSIS
-    ビルド時にClientIdをXORエンコードしてC#ソースファイルを生成するスクリプト。
+    ビルド時にClientId等をXORマスクしてC#ソースファイルを生成するスクリプト。
     生成されたファイルはgitには含まれず、ビルド時にのみ作成される。
+
+.NOTES
+    ここで行っているのは「難読化」であり暗号化ではない。マスク鍵もバイナリ内に存在するため、
+    生成された値は誰でも復元できる。Twitch ClientId は公開情報、Google のデスクトップアプリ用
+    client_secret も Google は秘密情報として扱わない。**秘密情報をこの仕組みに載せないこと。**
+
 .PARAMETER ClientId
-    TwitchのClientId
+    TwitchのClientId（未指定時は環境変数 TCS_TWITCH_CLIENT_ID）
 .PARAMETER YouTubeClientId
-    YouTube OAuthのClientId
+    YouTube OAuthのClientId（未指定時は環境変数 TCS_YOUTUBE_CLIENT_ID）
 .PARAMETER YouTubeClientSecret
-    YouTube OAuthのClientSecret（デスクトップアプリの場合も必要、秘匿不要）
+    YouTube OAuthのClientSecret（未指定時は環境変数 TCS_YOUTUBE_CLIENT_SECRET）
 .PARAMETER OutPath
     出力先ディレクトリ（通常はIntermediateOutputPath）
 #>
@@ -18,7 +24,12 @@ param(
     [string]$OutPath = "."
 )
 
-# XORキー（静的固定値）
+# コマンドライン引数が未指定の場合は環境変数から取得する（CI からの注入経路）
+if ([string]::IsNullOrEmpty($ClientId)) { $ClientId = [string]$env:TCS_TWITCH_CLIENT_ID }
+if ([string]::IsNullOrEmpty($YouTubeClientId)) { $YouTubeClientId = [string]$env:TCS_YOUTUBE_CLIENT_ID }
+if ([string]::IsNullOrEmpty($YouTubeClientSecret)) { $YouTubeClientSecret = [string]$env:TCS_YOUTUBE_CLIENT_SECRET }
+
+# 難読化用の固定マスク（暗号鍵ではない）
 $key = [byte[]]@(
     0x4F, 0xA2, 0x31, 0xBE, 0x7C, 0xD5, 0x19, 0xF3,
     0x8A, 0x46, 0xC7, 0x2E, 0x95, 0x6B, 0xD8, 0x14,

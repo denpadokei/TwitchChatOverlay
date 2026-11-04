@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] - 2026-11-05
+
+### Security
+- 自動更新の検証を強化
+  - `.sha256` が公開されていないリリースは自動更新の対象外に変更（fail-closed）
+  - チェックサム形式（64桁16進）の検証を追加
+  - ダウンロードにタイムアウト・最大サイズ・リダイレクト先ホスト検証を追加
+  - 更新ファイルの実行場所をアプリのダウンロード領域に限定
+  - リリースページ URL のスキーム・ホスト検証を追加
+- OBS WebSocket の TLS 対応
+  - `wss://` 接続オプション（`ObsWebSocketUseTls`）を追加
+  - 非ループバックホストへの平文接続を禁止
+  - ホスト文字列の検証を追加
+- GitHub Actions の第三者 Action をコミット SHA に固定（`sync-to-gitlab.yml`）
+- ビルド時シークレットをコマンドライン引数から環境変数経由の `build/local.props` 注入に変更
+
+### Changed
+- リポジトリからビルド済みバイナリ（`publish-check/`）を削除し、`.gitignore` に追加
+- BuildSecrets は暗号化ではなく難読化であることを明記
+
+---
+
 ## [0.4.0] - 2026-04-11
 
 ### Added
