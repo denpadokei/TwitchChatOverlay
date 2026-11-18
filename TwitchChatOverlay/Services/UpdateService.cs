@@ -8,6 +8,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using TwitchChatOverlay.Infrastructure;
 
 namespace TwitchChatOverlay.Services
 {
@@ -86,31 +87,36 @@ namespace TwitchChatOverlay.Services
                 return new UpdateCheckResult { IsUpdateAvailable = false };
             }
 
-            // アセットから .exe または .zip を探し、そのファイル名に対応する .sha256 をペアリングして取得する
+            // アセットから更新ファイルを選び、そのファイル名に対応する .sha256 をペアリングして取得する
             string downloadUrl = null;
             string checksumUrl = null;
+            string downloadName = null;
             if (json["assets"] is JArray assets)
             {
-                string downloadName = null;
+                // パッケージ版 (MSIX) はパッケージの差し替えしかできないため MSIX のみを対象にする。
+                // 未パッケージ版は従来どおり .exe / .zip のみを対象にし、MSIX しか無い場合はリリースページへ誘導する。
+                var priority = AppPackaging.IsPackaged
+                    ? new[] { ".msix", ".msixbundle" }
+                    : new[] { ".exe", ".zip" };
 
-                // まずダウンロード対象のアセット (.exe 優先, なければ .zip) を決定する
-                foreach (var asset in assets)
+                foreach (var extension in priority)
                 {
-                    var name = asset["name"]?.Value<string>() ?? "";
-                    var assetUrl = asset["browser_download_url"]?.Value<string>();
-
-                    if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                    foreach (var asset in assets)
                     {
+                        var name = asset["name"]?.Value<string>() ?? "";
+                        if (!name.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
                         downloadName = name;
-                        downloadUrl = assetUrl;
-                        break; // .exe があれば優先
+                        downloadUrl = asset["browser_download_url"]?.Value<string>();
+                        break;
                     }
 
-                    if (downloadUrl == null &&
-                        name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    if (downloadName != null)
                     {
-                        downloadName = name;
-                        downloadUrl = assetUrl;
+                        break;
                     }
                 }
 
@@ -139,6 +145,14 @@ namespace TwitchChatOverlay.Services
                 downloadUrl = null;
             }
 
+            // パッケージ版は MSIX 以外で自分自身を置き換えられない。
+            // MSIX が公開されていないリリースではダウンロードを案内せず、リリースページへ誘導する。
+            if (AppPackaging.IsPackaged && string.IsNullOrEmpty(downloadUrl))
+            {
+                LogService.Info(
+                    $"リリース {tagName} に MSIX が含まれていないため、リリースページを案内します。");
+            }
+
             LogService.Info($"アップデート利用可能: {tagName}");
             return new UpdateCheckResult
             {
@@ -148,6 +162,19 @@ namespace TwitchChatOverlay.Services
                 ChecksumUrl = checksumUrl,
                 ReleasePageUrl = htmlUrl,
             };
+        }
+
+        /// <summary>MSIX / App Installer で扱える更新ファイルかどうか。</summary>
+        private static bool IsMsixAsset(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName))
+            {
+                return false;
+            }
+
+            return fileName.EndsWith(".msix", StringComparison.OrdinalIgnoreCase)
+                || fileName.EndsWith(".msixbundle", StringComparison.OrdinalIgnoreCase)
+                || fileName.EndsWith(".appinstaller", StringComparison.OrdinalIgnoreCase);
         }
 
         // GitHub がリリースアセットに使用するホスト
@@ -411,6 +438,25 @@ namespace TwitchChatOverlay.Services
             }
 
             LogService.Info($"インストーラー起動: {fullPath}");
+
+            // MSIX / App Installer は OS（App Installer）に引き渡す。
+            // 署名検証・バージョン比較・差分適用は App Installer 側が行う。
+            if (IsMsixAsset(filePath))
+            {
+                _ = Process.Start(new ProcessStartInfo(fullPath) { UseShellExecute = true });
+                System.Windows.Application.Current.Dispatcher.Invoke(
+                    System.Windows.Application.Current.Shutdown);
+                return;
+            }
+
+            if (AppPackaging.IsPackaged)
+            {
+                // パッケージ版のインストール先は読み取り専用のため、exe / zip による自己更新は行わない
+                throw new InvalidOperationException(
+                    "MSIX 版では従来形式（exe / zip）の自己更新はできません。" +
+                    "リリースページから最新の MSIX をインストールしてください。");
+            }
+
             var currentExe = Process.GetCurrentProcess().MainModule!.FileName;
             var currentDir = Path.GetDirectoryName(currentExe)!;
 

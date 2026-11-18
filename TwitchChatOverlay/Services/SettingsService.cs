@@ -3,6 +3,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using TwitchChatOverlay.Infrastructure;
 
 namespace TwitchChatOverlay.Services
 {
@@ -86,6 +87,47 @@ namespace TwitchChatOverlay.Services
             var appFolder = Path.Combine(appDataPath, "TwitchChatOverlay");
             _ = Directory.CreateDirectory(appFolder);
             this._settingsPath = Path.Combine(appFolder, "settings.json");
+
+            if (AppPackaging.IsPackaged)
+            {
+                this.MigrateLegacySettingsIfNeeded();
+            }
+        }
+
+        /// <summary>
+        /// MSIX 版では %APPDATA% がパッケージ専用領域（LocalCache）へリダイレクトされるため、
+        /// 従来版の設定ファイルが残っていれば初回起動時に引き継ぎます。
+        /// </summary>
+        private void MigrateLegacySettingsIfNeeded()
+        {
+            try
+            {
+                if (File.Exists(this._settingsPath))
+                {
+                    return;
+                }
+
+                var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (string.IsNullOrEmpty(userProfile))
+                {
+                    return;
+                }
+
+                var legacyPath = Path.Combine(
+                    userProfile, "AppData", "Roaming", "TwitchChatOverlay", "settings.json");
+                if (!File.Exists(legacyPath))
+                {
+                    return;
+                }
+
+                File.Copy(legacyPath, this._settingsPath);
+                LogService.Info($"従来版の設定ファイルを引き継ぎました: {legacyPath}");
+            }
+            catch (Exception ex)
+            {
+                // 移行できなくても既定設定で起動できるため、警告に留める
+                LogService.Warning("従来版の設定ファイルの引き継ぎに失敗しました", ex);
+            }
         }
 
         /// <summary>
