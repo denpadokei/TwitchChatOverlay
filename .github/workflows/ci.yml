@@ -106,3 +106,14 @@ jobs:
         with:
           name: TwitchChatOverlay-win-x64-debug
           path: ./publish/debug/
+
+      # MSIX パッケージの生成（署名は自己署名で行い、パイプラインが壊れていないか検証する）
+      - name: Build MSIX (self-signed)
+        shell: pwsh
+        run: pwsh -NoProfile -File build/Build-Msix.ps1
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TwitchChatOverlay-msix
+          path: artifacts/msix/

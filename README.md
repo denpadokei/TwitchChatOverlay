@@ -42,6 +42,48 @@ Twitch / YouTube のチャンネルイベントを Windows デスクトップに
 |------|------|
 | OS | Windows 10 / 11 |
 | ランタイム | .NET 10.0 (Windows) |
+| MSIX 版の対応 OS | Windows 10 1809 (build 17763) 以降 |
+
+## インストール
+
+配布形式は ZIP と MSIX の 2 種類です。
+
+| 形式 | 内容 |
+|------|------|
+| ZIP (`TwitchChatOverlay-vX.X.X-win-x64.zip`) | 任意のフォルダへ展開し `TwitchChatOverlay.exe` を実行 |
+| MSIX (`TwitchChatOverlay-X.X.X-x64.msix`) | Windows のアプリとして登録（スタートメニュー登録・アンインストール・更新に対応） |
+
+### MSIX 版のインストール
+
+1. `TwitchChatOverlay-X.X.X-x64.msix` をダウンロードします。
+2. 自己署名証明書で署名されている場合は、初回のみ証明書を信頼させます（管理者権限が必要）。
+
+   ```powershell
+   Import-Certificate -FilePath .\TwitchChatOverlay-X.X.X-x64.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+   ```
+
+3. `.msix` をダブルクリックします（または `Add-AppxPackage .\TwitchChatOverlay-X.X.X-x64.msix`）。
+
+```powershell
+# インストール済みか確認
+Get-AppxPackage denpadokei.TwitchChatOverlay
+
+# アンインストール
+Get-AppxPackage denpadokei.TwitchChatOverlay | Remove-AppxPackage
+```
+
+> 証明書を信頼していない状態でインストールすると `0x800B0109`（証明書チェーンが信頼されていない）で失敗します。
+> 配布元が証明書を更新した場合は、新しい `.cer` で信頼をやり直してください。
+
+### MSIX 版の注意点
+
+- 設定とログは従来どおり `%APPDATA%\TwitchChatOverlay` を読み書きします。MSIX の書き込み仮想化により、実際のファイルは `%LOCALAPPDATA%\Packages\denpadokei.TwitchChatOverlay_<publisherId>\LocalCache\Roaming\TwitchChatOverlay` に保存されます（読み取りは実ファイルへフォールバックするため、ZIP 版の設定はそのまま引き継がれます）。
+  - アンインストールすると仮想化先のファイルは削除されますが、ZIP 版の設定ファイル自体は残ります。
+- 更新ファイルは仮想化の影響を受けない `%USERPROFILE%\Downloads\TwitchChatOverlay\updates` に保存されます（1 日以上前の古いファイルは自動削除されます）。
+- アプリ内の「更新する」ボタンは、パッケージ版では MSIX をダウンロードして Windows のインストーラー（App Installer）に引き渡します。
+  - MSIX が公開されていないリリースでは、自動更新せずリリースページを開きます。
+- インストール先は読み取り専用のため、ZIP 版のようなファイル差し替えによる自己更新は行いません。
+- 自動更新を成立させるには、すべてのリリースを**同じ署名証明書**で署名してください（証明書が変わると上書き更新できません）。
 
 ## ビルド方法
 
@@ -137,6 +179,55 @@ Copy-Item build/local.props.example build/local.props
 
 > `build/local.props` は `.gitignore` に含まれているため git にはコミットされません。
 
+### MSIX パッケージのビルド
+
+MSIX は Visual Studio を必要とせず、Windows SDK の `MakeAppx.exe` / `signtool.exe` だけで作成できます。
+
+| ツール | 用途 |
+|--------|------|
+| .NET SDK 10.0 | アプリの publish |
+| Windows SDK 10 (`MakeAppx.exe`, `signtool.exe`) | パッケージ化と署名 |
+| PowerShell 7.0 以降 (`pwsh`) | ビルドスクリプトの実行 |
+
+```powershell
+# 自己署名証明書で署名して artifacts/msix に出力
+pwsh -File build/Build-Msix.ps1
+
+# リリース用証明書で署名（パスワードは環境変数 MSIX_CERTIFICATE_PASSWORD で渡す）
+pwsh -File build/Build-Msix.ps1 -Version 0.5.0 -CertificatePath .\mycert.pfx
+```
+
+出力:
+
+| ファイル | 内容 |
+|----------|------|
+| `artifacts/msix/TwitchChatOverlay-X.X.X-x64.msix` | 署名済みパッケージ |
+| `artifacts/msix/TwitchChatOverlay-X.X.X-x64.msix.sha256` | SHA256（`<hash>  <filename>` 形式） |
+| `artifacts/msix/TwitchChatOverlay-X.X.X-x64.cer` | 自己署名時の公開証明書 |
+
+主なオプション:
+
+| オプション | 説明 |
+|------------|------|
+| `-Version` | MSIX のバージョン（省略時は csproj の `<Version>`） |
+| `-CertificatePath` / `-CertificatePassword` | リリース署名用 PFX |
+| `-CertificateThumbprint` | 証明書ストア（CurrentUser\My）の証明書で署名 |
+| `-Publisher` | Identity の Publisher（既定 `CN=denpadokei`。証明書を指定した場合は証明書の Subject を使用） |
+| `-Runtime` | `win-x64`（既定）/ `win-arm64` |
+| `-NoSign` | 署名しない（検証用） |
+| `-KeepLayout` | パッケージ化に使ったレイアウトを残す |
+
+> Identity の `Publisher` は署名証明書の Subject と完全に一致している必要があります。
+> `-CertificatePath` / `-CertificateThumbprint` を指定した場合、スクリプトは証明書の Subject を自動的に使用します。
+
+アイコンを差し替えた場合は、タイル画像を再生成してください（生成物は `packaging/Assets` にコミットします）。
+
+```powershell
+pwsh -File build/New-MsixAssets.ps1
+```
+
+証明書の管理・バージョン規則・手動でのパッケージ化手順は [`packaging/README.md`](packaging/README.md) を参照してください。
+
 ### GitHub Actions でのリリースビルド
 
 タグ（`vX.X.X`）を push するとリリースが自動作成されます。  
@@ -149,6 +240,16 @@ Copy-Item build/local.props.example build/local.props
 | `TWITCH_CLIENT_ID` | Twitch Developer Portal の Client ID |
 | `YOUTUBE_CLIENT_ID` | Google Cloud の OAuth Client ID |
 | `YOUTUBE_CLIENT_SECRET` | Google Cloud の OAuth Client Secret |
+| `MSIX_CERTIFICATE_BASE64` | MSIX 署名用 PFX を base64 エンコードした文字列（未設定なら MSIX は作成されません） |
+| `MSIX_CERTIFICATE_PASSWORD` | PFX のパスワード |
+
+MSIX 署名用 PFX の base64 化:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('.\mycert.pfx')) | Set-Clipboard
+```
+
+> 証明書は**リリース間で共通**のものを使用してください。証明書が変わると、インストール済みの MSIX を上書き更新できません。
 
 ## セットアップ
 

@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.0] - 2026-11-19
+
+### Added
+- MSIX インストーラーでの配布に対応
+  - `build/Build-Msix.ps1` で publish / マニフェスト生成 / `MakeAppx` / 署名 / SHA256 出力を自動化（Visual Studio 不要）
+  - `packaging/AppxManifest.xml` とタイル画像を追加（`build/New-MsixAssets.ps1` で `icon.ico` から生成）
+  - GitHub Actions の CI で MSIX を検証ビルド、Release では署名済み MSIX を添付
+- MSIX 版の自動更新
+  - パッケージ版では `.msix` をダウンロードして App Installer に引き渡す
+  - 更新ファイルは仮想化の影響を受けない `%USERPROFILE%\Downloads\TwitchChatOverlay\updates` に保存する
+  - `.msix` が公開されていないリリースではリリースページを開く
+- MSIX 版でも設定は従来どおり `%APPDATA%\TwitchChatOverlay` を読み書きする（ZIP 版の設定をそのまま利用）
+
+### Changed
+- パッケージ版（MSIX）では exe / zip による自己更新を無効化
+
+---
+
 ## [0.4.1] - 2026-11-05
 
 ### Security
