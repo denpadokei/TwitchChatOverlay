@@ -223,10 +223,16 @@ namespace TwitchChatOverlay.Services
             if (AppPackaging.IsPackaged)
             {
                 var downloads = KnownFolders.GetDownloadsPath();
-                if (!string.IsNullOrEmpty(downloads))
+                if (string.IsNullOrEmpty(downloads))
                 {
-                    return Path.Combine(downloads, "TwitchChatOverlay", "updates");
+                    // 仮想化される %TEMP% へ戻すと App Installer からファイルが見えなくなるため、失敗として扱う
+                    LogService.Warning("ダウンロード フォルダーを取得できないため、パッケージ版の自動更新を中止します。");
+                    throw new InvalidOperationException(
+                        "更新ファイルの保存先（ダウンロード フォルダー）を取得できませんでした。" +
+                        "リリースページから手動で更新してください。");
                 }
+
+                return Path.Combine(downloads, "TwitchChatOverlay", "updates");
             }
 
             return Path.Combine(Path.GetTempPath(), "TwitchChatOverlay");
