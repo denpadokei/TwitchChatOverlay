@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -98,26 +99,18 @@ namespace TwitchChatOverlay.Services
                 var priority = AppPackaging.IsPackaged
                     ? new[] { ".msix", ".msixbundle" }
                     : new[] { ".exe", ".zip" };
+                var architecture = GetCurrentArchitectureTag();
 
                 foreach (var extension in priority)
                 {
-                    foreach (var asset in assets)
+                    // アーキテクチャ表記のあるアセットを優先し、無い場合のみフォールバックする
+                    if (!TrySelectAsset(assets, extension, architecture, out downloadName, out downloadUrl) &&
+                        !TrySelectAsset(assets, extension, null, out downloadName, out downloadUrl))
                     {
-                        var name = asset["name"]?.Value<string>() ?? "";
-                        if (!name.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        downloadName = name;
-                        downloadUrl = asset["browser_download_url"]?.Value<string>();
-                        break;
+                        continue;
                     }
 
-                    if (downloadName != null)
-                    {
-                        break;
-                    }
+                    break;
                 }
 
                 // ダウンロード対象が決まっていれば、そのファイル名に対応する .sha256 を探す
@@ -177,6 +170,98 @@ namespace TwitchChatOverlay.Services
                 || fileName.EndsWith(".appinstaller", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>現在のプロセスのアーキテクチャ表記（例: x64）を返します。</summary>
+        private static string GetCurrentArchitectureTag()
+        {
+            return RuntimeInformation.ProcessArchitecture switch
+            {
+                Architecture.X64 => "x64",
+                Architecture.Arm64 => "arm64",
+                Architecture.X86 => "x86",
+                _ => null,
+            };
+        }
+
+        /// <summary>
+        /// リリースアセットから拡張子に一致するものを選びます。
+        /// <paramref name="architecture"/> を指定した場合は、ファイル名にその表記を含むものだけを対象にします。
+        /// </summary>
+        private static bool TrySelectAsset(
+            JArray assets, string extension, string architecture, out string name, out string url)
+        {
+            foreach (var asset in assets)
+            {
+                var candidate = asset["name"]?.Value<string>() ?? "";
+                if (!candidate.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (architecture != null &&
+                    !candidate.Contains(architecture, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                name = candidate;
+                url = asset["browser_download_url"]?.Value<string>();
+                return true;
+            }
+
+            name = null;
+            url = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 更新ファイルの保存先を返します。
+        /// MSIX では %APPDATA% / %LOCALAPPDATA% 配下の書き込みがパッケージ専用領域へ仮想化され、
+        /// パッケージ外のプロセス（App Installer）からは見えないため、仮想化対象外の Downloads を使用します。
+        /// </summary>
+        private static string GetUpdateDownloadDirectory()
+        {
+            if (AppPackaging.IsPackaged)
+            {
+                var downloads = KnownFolders.GetDownloadsPath();
+                if (!string.IsNullOrEmpty(downloads))
+                {
+                    return Path.Combine(downloads, "TwitchChatOverlay", "updates");
+                }
+            }
+
+            return Path.Combine(Path.GetTempPath(), "TwitchChatOverlay");
+        }
+
+        /// <summary>1 日以上前の更新ファイル（中断や失敗の残骸）を削除します。</summary>
+        private static void CleanupStaleUpdateFiles(string directory)
+        {
+            try
+            {
+                var cutoff = DateTime.UtcNow.AddDays(-1);
+                foreach (var pattern in new[] { "*.msix", "*.msixbundle", "*.exe", "*.zip" })
+                {
+                    foreach (var file in Directory.EnumerateFiles(directory, pattern))
+                    {
+                        try
+                        {
+                            if (File.GetLastWriteTimeUtc(file) < cutoff)
+                            {
+                                File.Delete(file);
+                            }
+                        }
+                        catch
+                        {
+                            // 削除できなくても更新自体は続行する
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // クリーンアップ失敗は無視する
+            }
+        }
+
         // GitHub がリリースアセットに使用するホスト
         // (2025 以降、実体の配信は release-assets.githubusercontent.com へ 302 される)
         private static readonly string[] TrustedHosts =
@@ -228,8 +313,9 @@ namespace TwitchChatOverlay.Services
             ValidateDownloadUrl(url);
             ValidateDownloadUrl(checksumUrl);
 
-            var tempDir = Path.Combine(Path.GetTempPath(), "TwitchChatOverlay");
+            var tempDir = GetUpdateDownloadDirectory();
             _ = Directory.CreateDirectory(tempDir);
+            CleanupStaleUpdateFiles(tempDir);
 
             var fileName = Path.GetFileName(new Uri(url).AbsolutePath);
             // URLデコード（%20 など）
@@ -425,7 +511,7 @@ namespace TwitchChatOverlay.Services
         public void LaunchInstaller(string filePath)
         {
             // 実行対象はこのアプリがダウンロードしたディレクトリ配下のみに限定する
-            var expectedDir = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "TwitchChatOverlay"));
+            var expectedDir = Path.GetFullPath(GetUpdateDownloadDirectory());
             var fullPath = Path.GetFullPath(filePath);
             if (!fullPath.StartsWith(expectedDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             {

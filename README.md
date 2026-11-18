@@ -77,9 +77,9 @@ Get-AppxPackage denpadokei.TwitchChatOverlay | Remove-AppxPackage
 
 ### MSIX 版の注意点
 
-- 設定とログの保存先は `%LOCALAPPDATA%\Packages\denpadokei.TwitchChatOverlay_<publisherId>\LocalCache\Roaming\TwitchChatOverlay` になります（MSIX のファイル仮想化によるもの）。
-  - 従来の ZIP 版から移行した場合、初回起動時に `%APPDATA%\TwitchChatOverlay\settings.json` を自動で引き継ぎます。
-  - ログは同じ場所の `logs` フォルダに出力されます。
+- 設定とログは従来どおり `%APPDATA%\TwitchChatOverlay` を読み書きします。MSIX の書き込み仮想化により、実際のファイルは `%LOCALAPPDATA%\Packages\denpadokei.TwitchChatOverlay_<publisherId>\LocalCache\Roaming\TwitchChatOverlay` に保存されます（読み取りは実ファイルへフォールバックするため、ZIP 版の設定はそのまま引き継がれます）。
+  - アンインストールすると仮想化先のファイルは削除されますが、ZIP 版の設定ファイル自体は残ります。
+- 更新ファイルは仮想化の影響を受けない `%USERPROFILE%\Downloads\TwitchChatOverlay\updates` に保存されます（1 日以上前の古いファイルは自動削除されます）。
 - アプリ内の「更新する」ボタンは、パッケージ版では MSIX をダウンロードして Windows のインストーラー（App Installer）に引き渡します。
   - MSIX が公開されていないリリースでは、自動更新せずリリースページを開きます。
 - インストール先は読み取り専用のため、ZIP 版のようなファイル差し替えによる自己更新は行いません。

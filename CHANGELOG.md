@@ -20,8 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GitHub Actions の CI で MSIX を検証ビルド、Release では署名済み MSIX を添付
 - MSIX 版の自動更新
   - パッケージ版では `.msix` をダウンロードして App Installer に引き渡す
+  - 更新ファイルは仮想化の影響を受けない `%USERPROFILE%\Downloads\TwitchChatOverlay\updates` に保存する
   - `.msix` が公開されていないリリースではリリースページを開く
-- MSIX 版の初回起動時に、従来版の設定ファイル（`%APPDATA%\TwitchChatOverlay\settings.json`）を自動移行
+- MSIX 版でも設定は従来どおり `%APPDATA%\TwitchChatOverlay` を読み書きする（ZIP 版の設定をそのまま利用）
 
 ### Changed
 - パッケージ版（MSIX）では exe / zip による自己更新を無効化

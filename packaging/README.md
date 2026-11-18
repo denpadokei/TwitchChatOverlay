@@ -58,6 +58,8 @@ pwsh -File build/Build-Msix.ps1 -Version 0.5.0 -CertificatePath .\mycert.pfx
 
 3. リリースタグを push すると、署名済み MSIX が Release に添付されます。
 
+署名には PFX を一時的に `Cert:\CurrentUser\My` へインポートし、`signtool /sha1` で署名したあと削除する方式を使います（PFX のパスワードを signtool の引数に載せないため）。署名証明書の公開鍵は常に `.cer` として出力され、Release にも添付されます。
+
 **証明書はリリース間で共通にしてください。** 証明書が変わると Publisher が変わり、インストール済みのパッケージを上書き更新できません（いったんアンインストールが必要になります）。証明書の有効期限が切れる前に更新し、タイムスタンプ署名（既定で `http://timestamp.digicert.com`）を有効にしておくと、期限切れ後も既存パッケージの署名検証が通りやすくなります。
 
 ### 自己署名（開発・検証用）
@@ -121,8 +123,9 @@ Get-AppxPackage denpadokei.TwitchChatOverlay | Remove-AppxPackage
 
 | 項目 | 挙動 |
 |------|------|
-| 設定・ログ | MSIX では `%APPDATA%` が `%LOCALAPPDATA%\Packages\denpadokei.TwitchChatOverlay_<publisherId>\LocalCache\Roaming` にリダイレクトされる。初回起動時に従来版の `%APPDATA%\TwitchChatOverlay\settings.json` を自動でコピーする |
+| 設定・ログ | `%APPDATA%\TwitchChatOverlay` を読み書きする。MSIX の書き込み仮想化により実体は `%LOCALAPPDATA%\Packages\<PFN>\LocalCache\Roaming\TwitchChatOverlay` に保存され、読み取りは実ファイルへフォールバックする（ZIP 版の設定はそのまま使われる） |
 | 自動更新 | `AppPackaging.IsPackaged` で判定し、MSIX 版は `.msix` アセットのみをダウンロードして App Installer に引き渡す。MSIX が無いリリースではリリースページを開く |
+| 更新ファイル | MSIX 版は仮想化対象外の `%USERPROFILE%\Downloads\TwitchChatOverlay\updates` に保存する（`%TEMP%` は仮想化され、パッケージ外の App Installer から見えないため） |
 | 自己更新 | MSIX 版では exe / zip によるファイル差し替えを行わない（インストール先が読み取り専用のため） |
 
 ## トラブルシューティング

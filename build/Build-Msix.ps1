@@ -149,7 +149,8 @@ if (-not $Version) {
 }
 
 $msixVersion = ConvertTo-MsixVersion -Value $Version
-$shortVersion = ($msixVersion.Split('.')[0..2] -join '.')
+# ファイル名は 4 桁目が 0 のときだけ 3 桁に縮める（1.2.3.4 と 1.2.3.0 の上書き衝突を避ける）
+$fileVersion = if ($msixVersion.EndsWith('.0')) { $msixVersion.Substring(0, $msixVersion.Length - 2) } else { $msixVersion }
 $arch = switch ($Runtime) {
     'win-x64' { 'x64' }
     'win-arm64' { 'arm64' }
@@ -163,7 +164,7 @@ New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 $OutputDir = (Resolve-Path -LiteralPath $OutputDir).ProviderPath
 
 $layoutDir = Join-Path $OutputDir 'layout'
-$packageBaseName = "TwitchChatOverlay-$shortVersion-$arch"
+$packageBaseName = "TwitchChatOverlay-$fileVersion-$arch"
 $msixPath = Join-Path $OutputDir "$packageBaseName.msix"
 
 Write-Host "リポジトリ : $repoRoot"
@@ -223,8 +224,10 @@ foreach ($file in $requiredLayoutFiles) {
 # 3. 署名証明書の解決
 # ---------------------------------------------------------------
 $cert = $null
-$pfxPasswordPlain = $null
+$cerPath = $null
 $timestampUsed = $null
+# PFX を一時的にストアへインポートした場合の後始末用
+$tempStoreThumbprint = $null
 
 if (-not $NoSign) {
     Write-Step '署名証明書の準備'
@@ -239,14 +242,37 @@ if (-not $NoSign) {
             throw "証明書ファイルが見つかりません: $CertificatePath"
         }
 
+        $pfxPath = (Resolve-Path -LiteralPath $CertificatePath).ProviderPath
+        $ephemeralFlags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+
+        # 事前に拇印だけ確認する（既存の証明書を誤って削除しないため）
         if ($CertificatePassword) {
-            $pfxPasswordPlain = [System.Net.NetworkCredential]::new('', $CertificatePassword).Password
-            $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificatePath, $pfxPasswordPlain)
+            $probe = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
+                $pfxPath,
+                [System.Net.NetworkCredential]::new('', $CertificatePassword).Password,
+                $ephemeralFlags)
         }
         else {
-            $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificatePath)
+            $probe = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfxPath)
         }
-        Write-Host "PFX を使用: $($cert.Subject)"
+        $thumbprint = $probe.Thumbprint
+        $preExisting = Test-Path -LiteralPath "Cert:\CurrentUser\My\$thumbprint"
+        $probe.Dispose()
+
+        # 署名はストアの証明書（/sha1）で行い、パスワードを signtool の引数に載せない
+        $importParams = @{
+            FilePath          = $pfxPath
+            CertStoreLocation = 'Cert:\CurrentUser\My'
+        }
+        if ($CertificatePassword) {
+            $importParams.Password = $CertificatePassword
+        }
+        $cert = Import-PfxCertificate @importParams
+        Write-Host "PFX を一時的にストアへインポートして署名します: $($cert.Subject)"
+
+        if (-not $preExisting) {
+            $tempStoreThumbprint = $cert.Thumbprint
+        }
     }
     elseif ($CertificateThumbprint) {
         $thumb = $CertificateThumbprint -replace '\s', ''
@@ -287,6 +313,11 @@ if (-not $NoSign) {
         Write-Verbose "Publisher を証明書の Subject に合わせます: $Publisher -> $($cert.Subject)"
     }
     $Publisher = $cert.Subject
+
+    # 証明書の公開鍵は常に出力する（自己署名の配布や証明書更新時の信頼に使用）
+    $cerPath = Join-Path $OutputDir "$packageBaseName.cer"
+    Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
+    Write-Host "公開証明書: $cerPath"
 }
 
 Write-Host "Publisher  : $Publisher"
@@ -363,56 +394,60 @@ if (-not (Test-Path -LiteralPath $msixPath)) {
 # ---------------------------------------------------------------
 # 6. 署名
 # ---------------------------------------------------------------
-$cerPath = $null
 if (-not $NoSign) {
     Write-Step 'signtool.exe で署名'
 
     $signtool = Get-SdkTool -Name 'signtool.exe'
     Write-Host "signtool : $signtool"
 
-    $signArgs = @('sign', '/fd', 'SHA256')
+    # 署名はストアの証明書（/sha1）で行う。PFX のパスワードを子プロセスの引数に載せない。
+    $signArgs = @('sign', '/fd', 'SHA256', '/sha1', $cert.Thumbprint)
+    $requireTimestamp = [bool]$CertificatePath
 
-    if ($CertificatePath) {
-        $signArgs += @('/f', $CertificatePath)
-        if ($pfxPasswordPlain) {
-            $signArgs += @('/p', $pfxPasswordPlain)
+    try {
+        $signed = $false
+        if ($TimestampUrl) {
+            & $signtool @signArgs /tr $TimestampUrl /td SHA256 $msixPath
+            if ($LASTEXITCODE -eq 0) {
+                $signed = $true
+                $timestampUsed = $TimestampUrl
+            }
+            elseif ($requireTimestamp) {
+                throw "タイムスタンプ付き署名に失敗しました (exit code $LASTEXITCODE)。リリース用の署名ではタイムスタンプを必須にしています。"
+            }
+            else {
+                Write-Warning 'タイムスタンプ付き署名に失敗しました。タイムスタンプなしで再試行します。'
+            }
         }
-    }
-    else {
-        $signArgs += @('/sha1', $cert.Thumbprint)
-        # 自己署名証明書はユーザーが信頼する必要があるため、公開証明書を同梱する
-        $cerPath = Join-Path $OutputDir "$packageBaseName.cer"
-        Export-Certificate -Cert $cert -FilePath $cerPath -Force | Out-Null
-        Write-Host "公開証明書: $cerPath"
-    }
 
-    # signtool はファイル指定以降の引数を追加ファイルとして扱うため、
-    # オプションはすべて msix のパスより前に並べる。
-    $signed = $false
-    if ($TimestampUrl) {
-        & $signtool @signArgs /tr $TimestampUrl /td SHA256 $msixPath
-        if ($LASTEXITCODE -eq 0) {
-            $signed = $true
-            $timestampUsed = $TimestampUrl
-        }
-        else {
-            Write-Warning 'タイムスタンプ付き署名に失敗しました。タイムスタンプなしで再試行します。'
-        }
-    }
+        if (-not $signed) {
+            if ($requireTimestamp) {
+                throw 'リリース用の署名ではタイムスタンプが必須です。-TimestampUrl を指定してください。'
+            }
 
-    if (-not $signed) {
-        & $signtool @signArgs $msixPath
+            & $signtool @signArgs $msixPath
+            if ($LASTEXITCODE -ne 0) {
+                throw "signtool sign が失敗しました (exit code $LASTEXITCODE)"
+            }
+        }
+
+        # 署名の検証（自己署名証明書が未信頼の場合は警告のみ）
+        & $signtool verify /pa $msixPath | Out-Host
         if ($LASTEXITCODE -ne 0) {
-            throw "signtool sign が失敗しました (exit code $LASTEXITCODE)"
+            Write-Warning '署名の検証に失敗しました（証明書チェーンが信頼されていない場合は想定どおりです）。'
+            if ($cerPath) {
+                Write-Warning "次のコマンドで信頼させてからインストールしてください: Import-Certificate -FilePath '$cerPath' -CertStoreLocation Cert:\LocalMachine\TrustedPeople"
+            }
         }
     }
-
-    # 署名の検証（自己署名証明書が未信頼の場合は警告のみ）
-    & $signtool verify /pa $msixPath | Out-Host
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning '署名の検証に失敗しました（証明書チェーンが信頼されていない場合は想定どおりです）。'
-        if ($cerPath) {
-            Write-Warning "次のコマンドで信頼させてからインストールしてください: Import-Certificate -FilePath '$cerPath' -CertStoreLocation Cert:\LocalMachine\TrustedPeople"
+    catch {
+        # 署名に失敗した未署名パッケージを成果物として残さない
+        Remove-Item -LiteralPath $msixPath -Force -ErrorAction SilentlyContinue
+        throw
+    }
+    finally {
+        if ($tempStoreThumbprint) {
+            Remove-Item -LiteralPath "Cert:\CurrentUser\My\$tempStoreThumbprint" -Force -ErrorAction SilentlyContinue
         }
     }
 }

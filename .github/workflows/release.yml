@@ -135,4 +135,5 @@ jobs:
           files: |
             artifacts/msix/*.msix
             artifacts/msix/*.msix.sha256
+            artifacts/msix/*.cer
           token: ${{ secrets.GITHUB_TOKEN }}
