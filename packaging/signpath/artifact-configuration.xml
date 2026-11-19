@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath.io の Artifact Configuration（MSIX 用）。
+  リリースワークフローは未署名の MSIX を TwitchChatOverlay.msix という名前で
+  GitHub Actions の artifact（ZIP）としてアップロードするため、ZIP のルートにある
+  そのファイルを署名対象として指定します。
+
+  SignPath のプロジェクト設定でこのファイルをアップロードし、
+  その slug をリポジトリ変数 SIGNPATH_ARTIFACT_CONFIGURATION_SLUG に設定してください。
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <msix-file path="TwitchChatOverlay.msix">
+      <authenticode-sign />
+    </msix-file>
+  </zip-file>
+</artifact-configuration>

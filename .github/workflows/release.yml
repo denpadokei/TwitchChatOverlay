@@ -83,22 +83,57 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           "$hash  $zip" | Out-File -FilePath "$zip.sha256" -Encoding utf8NoBOM
 
-      - name: Check MSIX signing certificate
+      - name: Determine MSIX signing method
         id: msix
         shell: pwsh
         env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
           MSIX_CERTIFICATE_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:MSIX_CERTIFICATE_BASE64)) {
-            "enabled=false" >> $env:GITHUB_OUTPUT
+          # SignPath Foundation のコード署名証明書 Subject。
+          # SignPath 側で証明書が更新された場合はこの値を更新する（MSIX の Identity Publisher と一致必須）。
+          $expectedPublisher = 'CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US'
+
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
+            $requiredVariables = @(
+              'MSIX_PUBLISHER',
+              'SIGNPATH_ORGANIZATION_ID',
+              'SIGNPATH_PROJECT_SLUG',
+              'SIGNPATH_SIGNING_POLICY_SLUG',
+              'SIGNPATH_ARTIFACT_CONFIGURATION_SLUG'
+            )
+            $missing = @($requiredVariables | Where-Object {
+              [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))
+            })
+            if ($missing.Count -gt 0) {
+              throw "SignPath を使う場合は次のリポジトリ変数を設定してください (Settings > Secrets and variables > Actions > Variables): $($missing -join ', ')"
+            }
+
+            if ($env:MSIX_PUBLISHER -ne $expectedPublisher) {
+              throw "MSIX_PUBLISHER が SignPath Foundation の証明書 Subject と一致しません。`n期待値: $expectedPublisher`n実際値: $($env:MSIX_PUBLISHER)"
+            }
+
+            "mode=signpath" >> $env:GITHUB_OUTPUT
             exit 0
           }
-          "enabled=true" >> $env:GITHUB_OUTPUT
-          $bytes = [Convert]::FromBase64String($env:MSIX_CERTIFICATE_BASE64)
-          [IO.File]::WriteAllBytes((Join-Path $PWD 'msix-signing.pfx'), $bytes)
 
+          if (-not [string]::IsNullOrWhiteSpace($env:MSIX_CERTIFICATE_BASE64)) {
+            "mode=pfx" >> $env:GITHUB_OUTPUT
+            $bytes = [Convert]::FromBase64String($env:MSIX_CERTIFICATE_BASE64)
+            [IO.File]::WriteAllBytes((Join-Path $PWD 'msix-signing.pfx'), $bytes)
+            exit 0
+          }
+
+          "mode=none" >> $env:GITHUB_OUTPUT
+
+      # --- PFX 署名 ---
       - name: Build signed MSIX
-        if: steps.msix.outputs.enabled == 'true'
+        if: steps.msix.outputs.mode == 'pfx'
         shell: pwsh
         env:
           # パスワードはコマンドライン引数ではなく環境変数で渡す（プロセス引数への露出を避ける）
@@ -109,15 +144,95 @@ jobs:
           -CertificatePath ./msix-signing.pfx
 
       - name: Remove MSIX signing certificate
-        if: always() && steps.msix.outputs.enabled == 'true'
+        if: always() && steps.msix.outputs.mode == 'pfx'
         shell: pwsh
         run: Remove-Item ./msix-signing.pfx -Force -ErrorAction SilentlyContinue
 
-      - name: Warn when MSIX signing certificate is missing
-        if: steps.msix.outputs.enabled != 'true'
+      # --- SignPath 署名（未署名でビルドして署名を依頼する） ---
+      - name: Build unsigned MSIX for SignPath
+        if: steps.msix.outputs.mode == 'signpath'
+        shell: pwsh
+        env:
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+        run: |
+          pwsh -NoProfile -File build/Build-Msix.ps1 `
+            -Version "${{ steps.version.outputs.VERSION }}" `
+            -NoSign -SkipChecksum `
+            -Publisher "$env:MSIX_PUBLISHER"
+
+          New-Item -ItemType Directory -Path artifacts/signpath-input -Force | Out-Null
+          $msix = Get-ChildItem artifacts/msix/*.msix | Select-Object -First 1
+          Copy-Item $msix.FullName artifacts/signpath-input/TwitchChatOverlay.msix
+
+      - name: Upload unsigned MSIX
+        id: upload-unsigned-msix
+        if: steps.msix.outputs.mode == 'signpath'
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix-unsigned
+          path: artifacts/signpath-input/TwitchChatOverlay.msix
+          if-no-files-found: error
+
+      - name: Sign MSIX with SignPath
+        if: steps.msix.outputs.mode == 'signpath'
+        # signpath/github-action-submit-signing-request v3
+        uses: SignPath/github-action-submit-signing-request@4a84eb4ad763290f059275786f2deed97c2c672b
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-msix.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: artifacts/signpath-signed
+
+      - name: Prepare signed MSIX
+        if: steps.msix.outputs.mode == 'signpath'
         shell: pwsh
         run: |
-          Write-Host "::warning::MSIX_CERTIFICATE_BASE64 が未設定のため、このリリースには MSIX が含まれません。"
+          $signed = Get-ChildItem artifacts/signpath-signed -Filter *.msix -Recurse | Select-Object -First 1
+          if (-not $signed) {
+            throw 'SignPath から署名済み MSIX を取得できませんでした。'
+          }
+
+          $final = Get-ChildItem artifacts/msix/*.msix | Select-Object -First 1
+          Copy-Item $signed.FullName $final.FullName -Force
+
+          $hash = (Get-FileHash $final.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath "$($final.FullName).sha256" -Value "$hash  $($final.Name)" -Encoding utf8NoBOM
+
+          # 署名の検証（signtool は Windows SDK に含まれる）
+          $sdkRoots = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'),
+            (Join-Path $env:ProgramFiles 'Windows Kits\10\bin')
+          )
+          $signtool = foreach ($root in $sdkRoots) {
+            if (-not (Test-Path -LiteralPath $root)) { continue }
+            Get-ChildItem -LiteralPath $root -Directory |
+              Where-Object Name -match '^\d+\.\d+\.\d+\.\d+$' |
+              Sort-Object { [version]$_.Name } -Descending |
+              ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
+              Where-Object { Test-Path -LiteralPath $_ }
+          } | Select-Object -First 1
+
+          if (-not $signtool) {
+            $signtool = (Get-Command 'signtool.exe' -ErrorAction SilentlyContinue).Source
+          }
+          if (-not $signtool) {
+            throw 'signtool.exe が見つかりません（Windows SDK が必要です）。'
+          }
+
+          & $signtool verify /pa $final.FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw '署名済み MSIX の検証に失敗しました。'
+          }
+
+      - name: Warn when MSIX signing is not configured
+        if: steps.msix.outputs.mode == 'none'
+        shell: pwsh
+        run: |
+          Write-Host "::warning::SIGNPATH_API_TOKEN / MSIX_CERTIFICATE_BASE64 が未設定のため、このリリースには MSIX が含まれません。"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -129,11 +244,17 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Attach MSIX to GitHub Release
-        if: steps.msix.outputs.enabled == 'true'
+        if: steps.msix.outputs.mode != 'none'
         uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/msix/*.msix
             artifacts/msix/*.msix.sha256
-            artifacts/msix/*.cer
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attach MSIX certificate to GitHub Release
+        if: steps.msix.outputs.mode == 'pfx'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/msix/*.cer
           token: ${{ secrets.GITHUB_TOKEN }}

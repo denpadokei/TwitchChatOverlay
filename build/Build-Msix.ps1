@@ -59,6 +59,7 @@ param(
     [string]$CertificateThumbprint,
 
     [switch]$NoSign,
+    [switch]$SkipChecksum,
     [switch]$KeepLayout,
     [switch]$SkipPublish,
 
@@ -455,12 +456,20 @@ if (-not $NoSign) {
 # ---------------------------------------------------------------
 # 7. チェックサム
 # ---------------------------------------------------------------
-Write-Step 'SHA256 チェックサムの出力'
+$hash = $null
+$checksumPath = $null
+if ($SkipChecksum) {
+    Write-Step 'SHA256 チェックサムの出力（スキップ）'
+    Write-Host '署名後に別途生成してください（SignPath など外部で署名する場合）。'
+}
+else {
+    Write-Step 'SHA256 チェックサムの出力'
 
-$hash = (Get-FileHash -LiteralPath $msixPath -Algorithm SHA256).Hash.ToLowerInvariant()
-$checksumPath = "$msixPath.sha256"
-# UpdateService は "<hex>  <filename>" 形式（sha256sum 標準）を期待する
-Set-Content -LiteralPath $checksumPath -Value "$hash  $([System.IO.Path]::GetFileName($msixPath))" -Encoding utf8NoBOM
+    $hash = (Get-FileHash -LiteralPath $msixPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $checksumPath = "$msixPath.sha256"
+    # UpdateService は "<hex>  <filename>" 形式（sha256sum 標準）を期待する
+    Set-Content -LiteralPath $checksumPath -Value "$hash  $([System.IO.Path]::GetFileName($msixPath))" -Encoding utf8NoBOM
+}
 
 if (-not $KeepLayout) {
     Remove-Item -LiteralPath $layoutDir -Recurse -Force -ErrorAction SilentlyContinue
@@ -472,8 +481,10 @@ if (-not $KeepLayout) {
 Write-Step '完了'
 Write-Host ("パッケージ   : {0}" -f $msixPath)
 Write-Host ("サイズ       : {0:N1} MB" -f ((Get-Item -LiteralPath $msixPath).Length / 1MB))
-Write-Host ("SHA256       : {0}" -f $hash)
-Write-Host ("チェックサム : {0}" -f $checksumPath)
+if ($checksumPath) {
+    Write-Host ("SHA256       : {0}" -f $hash)
+    Write-Host ("チェックサム : {0}" -f $checksumPath)
+}
 if ($cerPath) {
     Write-Host ("公開証明書   : {0}" -f $cerPath)
 }

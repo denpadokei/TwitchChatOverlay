@@ -78,6 +78,24 @@ Import-Certificate -FilePath .\TwitchChatOverlay-X.X.X-x64.cer -CertStoreLocatio
 Get-ChildItem Cert:\LocalMachine\TrustedPeople | Where-Object Subject -eq 'CN=denpadokei' | Remove-Item
 ```
 
+### SignPath Foundation（OSS 無償署名）
+
+公開リポジトリの OSS プロジェクトは [SignPath Foundation](https://signpath.org/) の無償署名を利用できます（承認制）。
+
+- 証明書は SignPath Foundation 名義で発行され、秘密鍵は SignPath の HSM で管理されます（PFX の管理は不要）。
+- MSIX の `Identity Publisher` は証明書の Subject と完全一致させる必要があるため、次をリポジトリ変数 `MSIX_PUBLISHER` に設定します。
+
+  ```
+  CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US
+  ```
+
+- 署名対象は `packaging/signpath/artifact-configuration.xml` です。SignPath のプロジェクトに Artifact Configuration として登録し、その slug を `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` に設定してください。
+- リリースワークフローは未署名の MSIX を artifact としてアップロードし、`signpath/github-action-submit-signing-request` で署名済みパッケージを受け取ります（`SIGNPATH_API_TOKEN` と `SIGNPATH_*` 変数が必要）。
+
+申請から承認まで日数がかかります。承認後に `SIGNPATH_API_TOKEN` を登録すると、次のリリースから署名済み MSIX が添付されます。
+
+> 署名方式を自己署名から SignPath に切り替えると `Publisher` が変わり、インストール済みの MSIX を上書き更新できません（アンインストールが必要）。最初の MSIX 公開前に方式を確定してください。
+
 ## バージョン
 
 - MSIX のバージョンは必ず 4 桁（`Major.Minor.Build.Revision`）です。3 桁で指定した場合は 4 桁目に `0` が補われます。
