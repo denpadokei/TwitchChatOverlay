@@ -83,19 +83,41 @@ jobs:
           $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
           "$hash  $zip" | Out-File -FilePath "$zip.sha256" -Encoding utf8NoBOM
 
-      # SignPath Foundation（OSS 無償署名） > PFX 署名 > MSIX なし の優先順で方式を決める
       - name: Determine MSIX signing method
         id: msix
         shell: pwsh
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
           MSIX_CERTIFICATE_BASE64: ${{ secrets.MSIX_CERTIFICATE_BASE64 }}
           MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
         run: |
+          # SignPath Foundation のコード署名証明書 Subject。
+          # SignPath 側で証明書が更新された場合はこの値を更新する（MSIX の Identity Publisher と一致必須）。
+          $expectedPublisher = 'CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US'
+
           if (-not [string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
-            if ([string]::IsNullOrWhiteSpace($env:MSIX_PUBLISHER)) {
-              throw "SignPath を使う場合はリポジトリ変数 MSIX_PUBLISHER が必要です（SignPath Foundation の証明書 Subject: 'CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US'）"
+            $requiredVariables = @(
+              'MSIX_PUBLISHER',
+              'SIGNPATH_ORGANIZATION_ID',
+              'SIGNPATH_PROJECT_SLUG',
+              'SIGNPATH_SIGNING_POLICY_SLUG',
+              'SIGNPATH_ARTIFACT_CONFIGURATION_SLUG'
+            )
+            $missing = @($requiredVariables | Where-Object {
+              [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_))
+            })
+            if ($missing.Count -gt 0) {
+              throw "SignPath を使う場合は次のリポジトリ変数を設定してください (Settings > Secrets and variables > Actions > Variables): $($missing -join ', ')"
             }
+
+            if ($env:MSIX_PUBLISHER -ne $expectedPublisher) {
+              throw "MSIX_PUBLISHER が SignPath Foundation の証明書 Subject と一致しません。`n期待値: $expectedPublisher`n実際値: $($env:MSIX_PUBLISHER)"
+            }
+
             "mode=signpath" >> $env:GITHUB_OUTPUT
             exit 0
           }
@@ -181,12 +203,22 @@ jobs:
           Set-Content -LiteralPath "$($final.FullName).sha256" -Value "$hash  $($final.Name)" -Encoding utf8NoBOM
 
           # 署名の検証（signtool は Windows SDK に含まれる）
-          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory |
-            Where-Object Name -match '^\d+\.\d+\.\d+\.\d+$' |
-            Sort-Object { [version]$_.Name } -Descending |
-            ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
-            Where-Object { Test-Path $_ } |
-            Select-Object -First 1
+          $sdkRoots = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'),
+            (Join-Path $env:ProgramFiles 'Windows Kits\10\bin')
+          )
+          $signtool = foreach ($root in $sdkRoots) {
+            if (-not (Test-Path -LiteralPath $root)) { continue }
+            Get-ChildItem -LiteralPath $root -Directory |
+              Where-Object Name -match '^\d+\.\d+\.\d+\.\d+$' |
+              Sort-Object { [version]$_.Name } -Descending |
+              ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
+              Where-Object { Test-Path -LiteralPath $_ }
+          } | Select-Object -First 1
+
+          if (-not $signtool) {
+            $signtool = (Get-Command 'signtool.exe' -ErrorAction SilentlyContinue).Source
+          }
           if (-not $signtool) {
             throw 'signtool.exe が見つかりません（Windows SDK が必要です）。'
           }
@@ -218,5 +250,11 @@ jobs:
           files: |
             artifacts/msix/*.msix
             artifacts/msix/*.msix.sha256
-            artifacts/msix/*.cer
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attach MSIX certificate to GitHub Release
+        if: steps.msix.outputs.mode == 'pfx'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/msix/*.cer
           token: ${{ secrets.GITHUB_TOKEN }}
