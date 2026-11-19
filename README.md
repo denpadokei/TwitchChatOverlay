@@ -56,7 +56,7 @@ Twitch / YouTube のチャンネルイベントを Windows デスクトップに
 ### MSIX 版のインストール
 
 1. `TwitchChatOverlay-X.X.X-x64.msix` をダウンロードします。
-2. 自己署名証明書で署名されている場合のみ、初回の証明書信頼が必要です（管理者権限）。SignPath Foundation で署名されたリリースでは不要です。
+2. 自己署名証明書で署名されている場合は、初回のみ証明書を信頼させます（管理者権限が必要）。
 
    ```powershell
    Import-Certificate -FilePath .\TwitchChatOverlay-X.X.X-x64.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
@@ -214,8 +214,7 @@ pwsh -File build/Build-Msix.ps1 -Version 0.5.0 -CertificatePath .\mycert.pfx
 | `-CertificateThumbprint` | 証明書ストア（CurrentUser\My）の証明書で署名 |
 | `-Publisher` | Identity の Publisher（既定 `CN=denpadokei`。証明書を指定した場合は証明書の Subject を使用） |
 | `-Runtime` | `win-x64`（既定）/ `win-arm64` |
-| `-NoSign` | 署名しない（SignPath など外部で署名する場合） |
-| `-SkipChecksum` | SHA256 を出力しない（署名後に別途生成する場合） |
+| `-NoSign` | 署名しない（検証用） |
 | `-KeepLayout` | パッケージ化に使ったレイアウトを残す |
 
 > Identity の `Publisher` は署名証明書の Subject と完全に一致している必要があります。
@@ -229,13 +228,6 @@ pwsh -File build/New-MsixAssets.ps1
 
 証明書の管理・バージョン規則・手動でのパッケージ化手順は [`packaging/README.md`](packaging/README.md) を参照してください。
 
-SignPath Foundation（OSS 無償署名）で署名する場合は、Publisher を SignPath の証明書 Subject に合わせて未署名でビルドします（リリースワークフローと同じ手順）。
-
-```powershell
-pwsh -File build/Build-Msix.ps1 -NoSign -SkipChecksum `
-  -Publisher "CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US"
-```
-
 ### GitHub Actions でのリリースビルド
 
 タグ（`vX.X.X`）を push するとリリースが自動作成されます。  
@@ -248,21 +240,8 @@ pwsh -File build/Build-Msix.ps1 -NoSign -SkipChecksum `
 | `TWITCH_CLIENT_ID` | Twitch Developer Portal の Client ID |
 | `YOUTUBE_CLIENT_ID` | Google Cloud の OAuth Client ID |
 | `YOUTUBE_CLIENT_SECRET` | Google Cloud の OAuth Client Secret |
-| `MSIX_CERTIFICATE_BASE64` | MSIX 署名用 PFX を base64 エンコードした文字列（SignPath を使わない場合） |
+| `MSIX_CERTIFICATE_BASE64` | MSIX 署名用 PFX を base64 エンコードした文字列（未設定なら MSIX は作成されません） |
 | `MSIX_CERTIFICATE_PASSWORD` | PFX のパスワード |
-| `SIGNPATH_API_TOKEN` | [SignPath Foundation](https://signpath.org/) の API トークン（設定すると SignPath で署名。未設定なら PFX 署名または MSIX なし） |
-
-**Variables**（Settings → Secrets and variables → Actions → **Variables** タブ）
-
-| Name | Value |
-|------|-------|
-| `MSIX_PUBLISHER` | MSIX の `Identity Publisher`。SignPath Foundation の証明書 Subject: `CN=SignPath Foundation, O=SignPath Foundation, L=Lewes, S=Delaware, C=US` |
-| `SIGNPATH_ORGANIZATION_ID` | SignPath の組織 ID |
-| `SIGNPATH_PROJECT_SLUG` | SignPath のプロジェクト slug |
-| `SIGNPATH_SIGNING_POLICY_SLUG` | 署名ポリシーの slug（例: `release-signing`） |
-| `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | `packaging/signpath/artifact-configuration.xml` を登録した Artifact Configuration の slug |
-
-署名方式は **SignPath → PFX → MSIX なし** の順に自動で選択されます。
 
 MSIX 署名用 PFX の base64 化:
 

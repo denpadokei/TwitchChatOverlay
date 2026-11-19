@@ -27,11 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - パッケージ版（MSIX）では exe / zip による自己更新を無効化
 
-### Added
-- SignPath Foundation（OSS 無償署名）による署名済み MSIX のリリースに対応
-  - 未署名 MSIX をビルドして署名を依頼し、署名済みパッケージを Release に添付
-  - `packaging/signpath/artifact-configuration.xml` を追加
-
 ---
 
 ## [0.4.1] - 2026-11-05
