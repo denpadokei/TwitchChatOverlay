@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.1] - 2026-11-19
+
+### Added
+- 自己署名証明書で署名した MSIX を配布
+  - リリースワークフローが `MSIX_CERTIFICATE_BASE64` / `MSIX_CERTIFICATE_PASSWORD` で MSIX を署名し、`.cer` と SHA256 を添付
+  - インストール方法は README の「MSIX 版のインストール」を参照
+
+---
+
 ## [0.5.0] - 2026-11-19
 
 ### Added
