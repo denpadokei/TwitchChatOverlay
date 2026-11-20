@@ -89,12 +89,12 @@ Streamer.bot 連携は「クライアントから接続しに行く」構成で�
 
 ## 6. 対象外（参考）
 
-リポジトリ全体の `SECURITY_REVIEW.md`（2026-11-05）には、本 PR の差分外に High が 2 件残っています。
+リポジトリ全体の `SECURITY_REVIEW.md`（2026-11-05）には、本 PR の差分外に High が 2 件ありました。`main` をマージした時点で、1 件目は解消されています。
 
-1. `.github/workflows/sync-to-gitlab.yml` がサードパーティ Action を `@main` で参照（CI サプライチェーン）
-2. 開発機の `%APPDATA%\NuGet\NuGet.Config` に GitHub PAT を平文保存（トークンの失効・再発行が必要）
+1. `.github/workflows/sync-to-gitlab.yml` がサードパーティ Action を `@main` で参照 → **`main` 側でコミット SHA 固定と `permissions` 指定が入り解消**
+2. 開発機の `%APPDATA%\NuGet\NuGet.Config` に GitHub PAT を平文保存 → 残存（利用者本人によるトークン失効が必要）
 
-1 は CI 運用の変更、2 は利用者本人によるトークン失効が必要なため、本 PR のセキュリティレビューでは対象外としています。詳細と対応案は当該文書を参照してください。
+2 は本 PR のセキュリティレビューの対象外です。詳細と対応案は当該文書を参照してください。
 
 ## 7. 検証
 

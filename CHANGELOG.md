@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.5.0] - 2026-04-18
+## [0.5.2] - 2026-11-20
 
 ### Added
 - **Streamer.bot WebSocket 連携を新規追加**
@@ -64,6 +64,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Tests
 - `tests/TwitchChatOverlay.Tests` を追加（xUnit v3）。Streamer.bot のハンドシェイク / 認証 / 購読 / イベント変換 / 表示フィルターを 16 テストで検証
 - CI にテスト実行ステップを追加
+
+---
+
+## [0.5.1] - 2026-11-19
+
+### Added
+- 自己署名証明書で署名した MSIX を配布
+  - リリースワークフローが `MSIX_CERTIFICATE_BASE64` / `MSIX_CERTIFICATE_PASSWORD` で MSIX を署名し、`.cer` と SHA256 を添付
+  - インストール方法は README の「MSIX 版のインストール」を参照
+
+---
+
+## [0.5.0] - 2026-11-19
+
+### Added
+- MSIX インストーラーでの配布に対応
+  - `build/Build-Msix.ps1` で publish / マニフェスト生成 / `MakeAppx` / 署名 / SHA256 出力を自動化（Visual Studio 不要）
+  - `packaging/AppxManifest.xml` とタイル画像を追加（`build/New-MsixAssets.ps1` で `icon.ico` から生成）
+  - GitHub Actions の CI で MSIX を検証ビルド、Release では署名済み MSIX を添付
+- MSIX 版の自動更新
+  - パッケージ版では `.msix` をダウンロードして App Installer に引き渡す
+  - 更新ファイルは仮想化の影響を受けない `%USERPROFILE%\Downloads\TwitchChatOverlay\updates` に保存する
+  - `.msix` が公開されていないリリースではリリースページを開く
+- MSIX 版でも設定は従来どおり `%APPDATA%\TwitchChatOverlay` を読み書きする（ZIP 版の設定をそのまま利用）
+
+### Changed
+- パッケージ版（MSIX）では exe / zip による自己更新を無効化
+
+---
+
+## [0.4.1] - 2026-11-05
+
+### Security
+- 自動更新の検証を強化
+  - `.sha256` が公開されていないリリースは自動更新の対象外に変更（fail-closed）
+  - チェックサム形式（64桁16進）の検証を追加
+  - ダウンロードにタイムアウト・最大サイズ・リダイレクト先ホスト検証を追加
+  - 更新ファイルの実行場所をアプリのダウンロード領域に限定
+  - リリースページ URL のスキーム・ホスト検証を追加
+- OBS WebSocket の TLS 対応
+  - `wss://` 接続オプション（`ObsWebSocketUseTls`）を追加
+  - 非ループバックホストへの平文接続を禁止
+  - ホスト文字列の検証を追加
+- GitHub Actions の第三者 Action をコミット SHA に固定（`sync-to-gitlab.yml`）
+- ビルド時シークレットをコマンドライン引数から環境変数経由の `build/local.props` 注入に変更
+
+### Changed
+- リポジトリからビルド済みバイナリ（`publish-check/`）を削除し、`.gitignore` に追加
+- BuildSecrets は暗号化ではなく難読化であることを明記
 
 ---
 

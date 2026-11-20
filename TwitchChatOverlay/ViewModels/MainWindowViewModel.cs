@@ -446,6 +446,12 @@ namespace TwitchChatOverlay.ViewModels
             set => this.SetProperty(ref field, value);
         } = 4455;
 
+        public bool ObsWebSocketUseTls
+        {
+            get;
+            set => this.SetProperty(ref field, value);
+        }
+
         public string ObsWebSocketPassword
         {
             get;
@@ -1398,6 +1404,7 @@ namespace TwitchChatOverlay.ViewModels
                 settings.ObsWebSocketEnabled = this.ObsWebSocketEnabled;
                 settings.ObsWebSocketHost = this.ObsWebSocketHost;
                 settings.ObsWebSocketPort = this.ObsWebSocketPort;
+                settings.ObsWebSocketUseTls = this.ObsWebSocketUseTls;
                 settings.ObsWebSocketPassword = this.ObsWebSocketPassword;
                 settings.StreamerBotEnabled = this.StreamerBotEnabled;
                 settings.StreamerBotHost = this.StreamerBotHost;
@@ -1470,6 +1477,7 @@ namespace TwitchChatOverlay.ViewModels
                 this.ObsWebSocketEnabled = settings.ObsWebSocketEnabled;
                 this.ObsWebSocketHost = string.IsNullOrWhiteSpace(settings.ObsWebSocketHost) ? "127.0.0.1" : settings.ObsWebSocketHost;
                 this.ObsWebSocketPort = settings.ObsWebSocketPort > 0 ? settings.ObsWebSocketPort : 4455;
+                this.ObsWebSocketUseTls = settings.ObsWebSocketUseTls;
                 this.ObsWebSocketPassword = settings.ObsWebSocketPassword ?? "";
                 this.UpdateObsStatusMessage();
                 this.StreamerBotEnabled = settings.StreamerBotEnabled;
@@ -1830,7 +1838,8 @@ namespace TwitchChatOverlay.ViewModels
                 var result = await this._obsWebSocketService.ConnectAsync(
                     this.ObsWebSocketHost,
                     this.ObsWebSocketPort,
-                    this.ObsWebSocketPassword);
+                    this.ObsWebSocketPassword,
+                    this.ObsWebSocketUseTls);
 
                 if (result.IsConnected)
                 {

@@ -111,7 +111,7 @@
 | CA-09 | `Ping` / `Pong` は公式仕様に記載が無い | サーバが送ってきた場合のみ応答する防御的実装。無害 |
 | CA-10 | 表示フィルターの組み合わせ（Streamer.bot の Twitch 通知 × 各イベント種別） | README の設定表に記載 |
 | CA-11 | ポート入力が XAML バインディング任せ | 既存の OBS タブと同じ。不正値は接続時に `ConfigurationError` |
-| CA-12 | リポジトリ全体の `SECURITY_REVIEW.md` に PR 対象外の High が残る | 別スコープ（第 8 章） |
+| CA-12 | リポジトリ全体の `SECURITY_REVIEW.md` に PR 対象外の High が残る | 別スコープ（第 8 章）。`main` をマージした時点で Action の SHA 固定は解消済み |
 
 ## 6. 再レビュー（修正後の確認）
 
@@ -156,12 +156,12 @@ Streamer.bot の本体 C# ソースは公開されていません（`Streamerbot
 
 ## 8. 対象外（参考）
 
-リポジトリ全体を対象とした既存の `SECURITY_REVIEW.md`（2026-11-05）には、PR #10 の差分に含まれない High が 2 件残っています。
+リポジトリ全体を対象とした既存の `SECURITY_REVIEW.md`（2026-11-05）には、PR #10 の差分に含まれない High が 2 件ありました。`main` をマージした時点で、1 つ目は解消されています。
 
-- `sync-to-gitlab.yml` のサードパーティ Action を `@main` で参照
-- 開発機の `NuGet.Config` に GitHub PAT を平文保存
+- `sync-to-gitlab.yml` のサードパーティ Action を `@main` で参照 → **`main` 側でコミット SHA 固定と `permissions` 指定が入り解消**
+- 開発機の `NuGet.Config` に GitHub PAT を平文保存 → 残存（トークンの失効・再発行が必要なため本 PR では扱わない）
 
-いずれも本 PR の変更範囲外であり、1 つ目は CI の運用判断、2 つ目はトークンの失効・再発行が必要なため、本レビューでは扱っていません。
+2 つ目は利用者本人によるトークン失効が必要なため、本レビューの対象外です。詳細と対応案は当該文書を参照してください。
 
 ## 9. 検証
 
