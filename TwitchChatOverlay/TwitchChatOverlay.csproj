@@ -14,9 +14,9 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <Version>0.5.1</Version>
-    <AssemblyVersion>0.5.1.0</AssemblyVersion>
-    <FileVersion>0.5.1.0</FileVersion>
+    <Version>0.5.2</Version>
+    <AssemblyVersion>0.5.2.0</AssemblyVersion>
+    <FileVersion>0.5.2.0</FileVersion>
     <AssemblyTitle>TwitchChatOverlay</AssemblyTitle>
     <Company>denpadokei</Company>
     <Product>TwitchChatOverlay</Product>
@@ -53,6 +53,10 @@
 
   <ItemGroup>
     <Content Include="icon.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TwitchChatOverlay.Tests" />
   </ItemGroup>
 
   <!-- ビルド前にシークレットを含むC#ファイルを自動生成するターゲット -->

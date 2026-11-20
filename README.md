@@ -7,14 +7,16 @@ Twitch / YouTube のチャンネルイベントを Windows デスクトップに
 - **EventSub WebSocket** で Twitch イベントをリアルタイム受信
 - YouTube は**配信検出（liveChatId解決）をポーリング**し、**チャット / イベント受信は gRPC ストリーム**で処理
 - `liveBroadcasts` による配信確認で YouTube の配信開始を待機
+- **Streamer.bot WebSocket 連携**（Twitch / YouTube / Kick イベントを一括受信）
 - 以下のイベントをトースト通知で表示：
-  - チャットメッセージ
+  - チャットメッセージ（Twitch / YouTube / Kick）
   - チャンネルポイント交換
   - レイド
   - フォロー
   - サブスク / ギフトサブ / リサブ
   - ハイプトレイン開始・終了
 - YouTubeコメント / Super Chat / メンバーシップ通知
+- **Kick チャット / フォロー / サブスク通知**（Streamer.bot 経由）
 - YouTube Live Chat の重複抑止メッセージキャッシュ件数を UI から調整可能
 - **Device Authorization Flow** による安全なOAuth認可（リダイレクトURL不要・クライアントシークレット不要）
 - **YouTube OAuth (PKCE)** による認可（ローカルコールバック使用）
@@ -107,6 +109,18 @@ dotnet build TwitchChatOverlay/TwitchChatOverlay.csproj
 
 > シークレットなしのビルドでは `BuildSecrets.ClientId` / `BuildSecrets.YouTubeClientId` が空文字になります。  
 > 動作確認には後述の「ローカルシークレット設定」が必要です。
+
+### テスト
+
+Streamer.bot WebSocket 連携のテスト（プロトコル・イベント変換・表示フィルター）は xUnit v3 のインプロセスランナーで実行します。
+
+```bash
+dotnet run --project tests/TwitchChatOverlay.Tests/TwitchChatOverlay.Tests.csproj
+```
+
+`.NET 10 SDK` 以降は `global.json` で `Microsoft.Testing.Platform` を指定しているため、`dotnet test --project tests/TwitchChatOverlay.Tests/TwitchChatOverlay.Tests.csproj` でも実行できます。
+
+（`dotnet run` は名前付きパイプを使わないため、制限された環境でも動作します。）
 
 ### ローカルシークレット設定
 
@@ -318,6 +332,44 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 
 現在の OBS 設定値は `%APPDATA%\TwitchChatOverlay\settings.json` に保存されます（暗号化保存）。
 
+| キー | 説明 | 既定値 |
+|------|------|--------|
+| `ObsWebSocketEnabled` | OBS 連携を有効化するか | `false` |
+| `ObsWebSocketHost` | OBS WebSocket の接続先ホスト | `127.0.0.1` |
+| `ObsWebSocketPort` | OBS WebSocket の接続先ポート | `4455` |
+| `ObsWebSocketPassword` | OBS WebSocket の接続パスワード | 空文字 |
+
+### 6. Streamer.bot 連携設定（任意）
+
+[Streamer.bot](https://streamer.bot/) の WebSocket Server 経由で Twitch / YouTube / Kick のイベントを受信できます。
+
+- Streamer.bot 側の設定:
+  - `Servers/Clients` → `WebSocket Server` を有効化
+  - アドレス: `127.0.0.1`（または `0.0.0.0`）、ポート: `8080`（デフォルト）
+  - 必要ならパスワードを設定
+  - Streamer.bot 側で Twitch / YouTube / Kick 接続を有効にしておくこと
+- アプリ側の設定:
+  - `Streamer.bot` タブを開き、「Streamer.bot WebSocket 連携を有効化」をオンにする
+  - Host / Port / Password を入力して「▶ 接続」
+  - フィルターチェックボックスで受信するプラットフォームとイベント種別を選択
+
+> **Streamer.bot 連携は、このアプリ独自の Twitch EventSub / YouTube gRPC 接続に追加される受信経路です。** 両方を同時に有効にすると同じイベントが二重に表示されます。Streamer.bot 経由に一本化する場合は、Twitch / YouTube タブの通知をオフにしてください。
+>
+> WebSocket は暗号化されません（`ws://`）。WebSocket Server は `127.0.0.1` でのみ待ち受けることを推奨します。
+>
+> Streamer.bot の WebSocket Server は v0.2.5 以降を対象としています（認証 API が v0.2.5 で追加されたため）。Kick イベントは Streamer.bot v1.0.0 以降でのみ受信できます。Kick が未設定の場合は Twitch / YouTube のみを購読して接続を継続します。
+
+| キー | 説明 | 既定値 |
+|------|------|--------|
+| `StreamerBotEnabled` | Streamer.bot 連携を有効化するか | `false` |
+| `StreamerBotHost` | WebSocket Server のホスト | `127.0.0.1` |
+| `StreamerBotPort` | WebSocket Server のポート | `8080` |
+| `StreamerBotPassword` | WebSocket Server のパスワード（認証なしの場合は空白） | 空文字 |
+| `ShowStreamerBotTwitchChat` | Twitch チャットメッセージを表示するか | `true` |
+| `ShowStreamerBotTwitchNotifications` | Twitch 通知（フォロー/サブスク/レイド等）を表示するか | `true` |
+| `ShowStreamerBotYouTube` | YouTube イベントを表示するか | `true` |
+| `ShowStreamerBotKick` | Kick イベントを表示するか | `true` |
+
 ## プライバシーと認可管理
 
 - YouTube OAuth トークンとリフレッシュトークンは `%APPDATA%\TwitchChatOverlay\settings.json` に暗号化保存されます
@@ -327,13 +379,6 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 - 配布物には同梱文書として `Docs/PrivacyPolicy.html` / `Docs/TermsOfUse.html` と、審査提出向けの `Docs/PrivacyPolicy.en.html` / `Docs/TermsOfUse.en.html` が含まれます
 - GitHub Actions の Release / CI では、publish 出力にこれらの文書が含まれていることを検証しています
 - 質問やプライバシーに関する連絡先は GitHub Discussions です: `https://github.com/denpadokei/TwitchChatOverlay/discussions`
-
-| キー | 説明 | 既定値 |
-|------|------|--------|
-| `ObsWebSocketEnabled` | OBS 連携を有効化するか | `false` |
-| `ObsWebSocketHost` | OBS WebSocket の接続先ホスト | `127.0.0.1` |
-| `ObsWebSocketPort` | OBS WebSocket の接続先ポート | `4455` |
-| `ObsWebSocketPassword` | OBS WebSocket の接続パスワード | 空文字 |
 
 ## 設定項目
 
@@ -345,6 +390,7 @@ YouTube の配信開始検出を OBS WebSocket と連携できます（任意）
 | 各イベントの ON/OFF | チャット / 報酬 / レイド / フォロー / サブスク / ギフトサブ / リサブ / ハイプトレイン |
 | YouTube通知 ON/OFF | YouTube Chat / Super Chat / Membership の表示切替 |
 | YouTube重複抑止キャッシュ件数 | 再接続時の旧コメント再表示を抑えるために保持する YouTube メッセージID件数。100以上で任意設定可能 |
+| Streamer.bot フィルター | Twitch チャット / Twitch 通知 / YouTube / Kick イベントの個別表示切替。Twitch 通知は「共通」タブのイベント別 ON/OFF と併用 |
 | 表示時間 (秒) | トーストが消えるまでの秒数（1〜30秒） |
 | 最大同時表示 | 同時に表示するトーストの最大数（1〜10件） |
 | 通知音 ON/OFF | コメント受信時の通知音を有効 / 無効に切り替え |

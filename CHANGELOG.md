@@ -11,6 +11,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - 2026-11-20
+
+### Added
+- **Streamer.bot WebSocket 連携を新規追加**
+  - `Services/StreamerBotService.cs` を追加
+  - Streamer.bot の WebSocket Server（デフォルト: `ws://127.0.0.1:8080/`）への接続・認証・イベント受信を実装
+  - 認証は OBS WebSocket と同じ SHA-256 アルゴリズム（`base64(SHA256(base64(SHA256(password+salt)) + challenge))`）
+  - Hello / Subscribe / Authenticate のハンドシェイクを実装
+  - 購読対象イベント:
+    - **Twitch**: ChatMessage, Follow, Sub, ReSub, GiftSub, GiftBomb, Raid, RewardRedemption, HypeTrainStart, HypeTrainEnd
+    - **YouTube**: Message, SuperChat, NewSponsor, MembershipGift
+    - **Kick**: ChatMessage, Follow, Subscription, GiftSubscription, Resubscription
+  - 各イベントを `OverlayNotification` にマッピングして既存のトースト通知フローへ統合
+  - 公開イベント: `NotificationReceived` / `ConnectionStateChanged` / `ConnectionLost`
+- Streamer.bot 設定タブを追加
+  - `Views/Tabs/StreamerBotSettingsTabView.xaml` を追加
+  - `ViewModels/StreamerBotSettingsTabViewModel.cs` を追加
+  - Host / Port / Password 入力、接続 / 切断ボタン、ステータス表示、フィルターチェックボックスを実装
+  - フィルター: Twitch チャット / Twitch 通知 / YouTube / Kick を個別 ON/OFF 可能
+- Streamer.bot 用設定項目を `AppSettings` に追加
+  - `StreamerBotEnabled` / `StreamerBotHost` / `StreamerBotPort` / `StreamerBotPassword`
+  - `ShowStreamerBotTwitchChat` / `ShowStreamerBotTwitchNotifications` / `ShowStreamerBotYouTube` / `ShowStreamerBotKick`
+- `OverlayNotification.SourcePlatform` に `Kick` を追加
+
+### Changed
+- `ToastNotificationService.Initialize()` に `StreamerBotService` を追加し、Kick イベントを含む3プラットフォームを同時購読
+- `ToastNotificationService.ShouldShow()` に Kick フィルターと Streamer.bot フィルターの判定を追加
+- `MainWindowViewModel` に Streamer.bot 接続状態管理・コマンド群を追加
+  - `ConnectStreamerBotCommand` / `DisconnectStreamerBotCommand`
+  - 起動時に `StreamerBotEnabled=true` の場合は自動接続
+- `App.xaml.cs` の DI 登録を拡張
+  - `StreamerBotService` を `RegisterSingleton` で追加
+  - `StreamerBotSettingsTabViewModel` を `Register` で追加
+- `MainWindow.xaml` に `Streamer.bot` タブを追加（YouTube タブの後）
+
+### Fixed
+- Streamer.bot のイベント payload を公式型定義に合わせて修正（`Follow` / `Sub` / `ReSub` / `GiftSub` / `RewardRedemption` / YouTube `Message` / Kick。旧実装はユーザー名が `(unknown)` になっていた）
+- Streamer.bot の表示フィルターが直接接続（Twitch EventSub / YouTube gRPC）の通知へ影響していた問題を修正（`OverlayNotification.ViaStreamerBot` で経路を分離）
+- イベント購読の失敗を検出し、Kick 非対応環境では Twitch / YouTube のみで再購読するよう修正
+- 接続切断後に 10 秒間隔で自動再接続するよう修正
+- 認証必須の判定を公式クライアントと同じ挙動（`GetInfo` の成否）に修正
+- 接続先ホスト / ポートの検証と IPv6 対応（`UriBuilder`）を追加
+- `MemberMileStone` のイベント名誤り、Kick `MassGiftSubscription` の未対応を修正
+- README の見出し欠落・OBS 設定表の重複・Streamer.bot 連携の説明（二重通知、平文 `ws://`、対応バージョン）を修正
+
+### Security
+- 受信イベント本文をログへ出力しないよう変更（チャット内容のディスク残留を防止）
+- 受信メッセージ長に 512 KB の上限を追加（メモリ枯渇対策）
+- 接続先ホストの形式検証を追加し、意図しない接続先への遷移を防止
+
+### Tests
+- `tests/TwitchChatOverlay.Tests` を追加（xUnit v3）。Streamer.bot のハンドシェイク / 認証 / 購読 / イベント変換 / 表示フィルターを 16 テストで検証
+- CI にテスト実行ステップを追加
+
+---
+
 ## [0.5.1] - 2026-11-19
 
 ### Added

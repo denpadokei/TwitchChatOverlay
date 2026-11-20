@@ -20,6 +20,10 @@ namespace TwitchChatOverlay.Models
     public class OverlayNotification
     {
         public string SourcePlatform { get; set; } = "Twitch";
+
+        /// <summary>Streamer.bot 経由で受信した通知かどうか。表示フィルターの判定に使用する。</summary>
+        public bool ViaStreamerBot { get; set; }
+
         public NotificationType Type { get; set; }
         public string Username { get; set; }
         public string DisplayText { get; set; }

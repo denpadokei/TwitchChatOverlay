@@ -109,6 +109,9 @@
             <TabItem Header="YouTube">
                 <tabs:YouTubeSettingsTabView />
             </TabItem>
+            <TabItem Header="Streamer.bot">
+                <tabs:StreamerBotSettingsTabView />
+            </TabItem>
         </TabControl>
 
         <Border Grid.Row="2"

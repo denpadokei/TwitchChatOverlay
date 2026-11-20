@@ -54,10 +54,11 @@ namespace TwitchChatOverlay.Services
             this._notificationSoundService = notificationSoundService;
         }
 
-        public void Initialize(TwitchEventSubService twitchEventSubService, YouTubeLiveChatService youTubeLiveChatService)
+        public void Initialize(TwitchEventSubService twitchEventSubService, YouTubeLiveChatService youTubeLiveChatService, StreamerBotService streamerBotService)
         {
             twitchEventSubService.NotificationReceived += this.OnNotificationReceived;
             youTubeLiveChatService.NotificationReceived += this.OnNotificationReceived;
+            streamerBotService.NotificationReceived += this.OnNotificationReceived;
         }
 
         public void ShowPreviewNotification(OverlayNotification notification)
@@ -111,10 +112,40 @@ namespace TwitchChatOverlay.Services
 
         private bool ShouldShow(OverlayNotification notification)
         {
-            var settings = this._settingsService.LoadSettings();
-            var isYouTube = string.Equals(notification.SourcePlatform, "YouTube", StringComparison.OrdinalIgnoreCase);
+            return ShouldShow(notification, this._settingsService.LoadSettings());
+        }
 
-            return notification.Type switch
+        /// <summary>
+        /// 通知を表示するかどうかを設定から判定する。
+        /// Streamer.bot 経由の通知は Streamer.bot タブのフィルターだけで判定し、
+        /// 直接接続（EventSub / YouTube）のフィルターとは独立させる。
+        /// </summary>
+        internal static bool ShouldShow(OverlayNotification notification, AppSettings settings)
+        {
+            var platform = notification.SourcePlatform ?? string.Empty;
+
+            if (notification.ViaStreamerBot)
+            {
+                return platform switch
+                {
+                    "Twitch" => notification.Type == NotificationType.Chat
+                        ? settings.ShowStreamerBotTwitchChat
+                        : settings.ShowStreamerBotTwitchNotifications && IsNotificationTypeEnabled(notification.Type, isYouTube: false, settings),
+                    "YouTube" => settings.ShowStreamerBotYouTube,
+                    "Kick" => settings.ShowStreamerBotKick,
+                    _ => false,
+                };
+            }
+
+            return IsNotificationTypeEnabled(
+                notification.Type,
+                string.Equals(platform, "YouTube", StringComparison.OrdinalIgnoreCase),
+                settings);
+        }
+
+        private static bool IsNotificationTypeEnabled(NotificationType type, bool isYouTube, AppSettings settings)
+        {
+            return type switch
             {
                 NotificationType.Chat => !isYouTube || settings.ShowYouTubeChat,
                 NotificationType.Reward => isYouTube ? settings.ShowYouTubeSuperChat : settings.ShowReward,
@@ -125,7 +156,7 @@ namespace TwitchChatOverlay.Services
                 NotificationType.Resub => settings.ShowResub,
                 NotificationType.HypeTrainBegin => settings.ShowHypeTrainBegin,
                 NotificationType.HypeTrainEnd => settings.ShowHypeTrainEnd,
-                _ => true
+                _ => true,
             };
         }
 
