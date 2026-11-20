@@ -3,4 +3,5 @@
     <File Path=".editorconfig" />
   </Folder>
   <Project Path="TwitchChatOverlay/TwitchChatOverlay.csproj" />
+  <Project Path="tests/TwitchChatOverlay.Tests/TwitchChatOverlay.Tests.csproj" />
 </Solution>

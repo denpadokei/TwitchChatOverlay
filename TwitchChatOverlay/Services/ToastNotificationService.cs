@@ -112,27 +112,52 @@ namespace TwitchChatOverlay.Services
 
         private bool ShouldShow(OverlayNotification notification)
         {
-            var settings = this._settingsService.LoadSettings();
-            var platform = notification.SourcePlatform ?? "";
-            var isYouTube = string.Equals(platform, "YouTube", StringComparison.OrdinalIgnoreCase);
-            var isKick = string.Equals(platform, "Kick", StringComparison.OrdinalIgnoreCase);
+            return ShouldShow(notification, this._settingsService.LoadSettings());
+        }
 
-            // Kick イベントのフィルタリング
-            return isKick
-                ? settings.ShowStreamerBotKick
-                : notification.Type switch
+        /// <summary>
+        /// 通知を表示するかどうかを設定から判定する。
+        /// Streamer.bot 経由の通知は Streamer.bot タブのフィルターだけで判定し、
+        /// 直接接続（EventSub / YouTube）のフィルターとは独立させる。
+        /// </summary>
+        internal static bool ShouldShow(OverlayNotification notification, AppSettings settings)
+        {
+            var platform = notification.SourcePlatform ?? string.Empty;
+
+            if (notification.ViaStreamerBot)
+            {
+                return platform switch
                 {
-                    NotificationType.Chat => isYouTube ? settings.ShowYouTubeChat || settings.ShowStreamerBotYouTube : settings.ShowStreamerBotTwitchChat,
-                    NotificationType.Reward => isYouTube ? settings.ShowYouTubeSuperChat || settings.ShowStreamerBotYouTube : settings.ShowReward && settings.ShowStreamerBotTwitchNotifications,
-                    NotificationType.Raid => settings.ShowRaid && settings.ShowStreamerBotTwitchNotifications,
-                    NotificationType.Follow => settings.ShowFollow && settings.ShowStreamerBotTwitchNotifications,
-                    NotificationType.Subscribe => isYouTube ? settings.ShowYouTubeMembership || settings.ShowStreamerBotYouTube : settings.ShowSubscribe && settings.ShowStreamerBotTwitchNotifications,
-                    NotificationType.GiftSubscribe => settings.ShowGiftSubscribe && settings.ShowStreamerBotTwitchNotifications,
-                    NotificationType.Resub => settings.ShowResub && settings.ShowStreamerBotTwitchNotifications,
-                    NotificationType.HypeTrainBegin => settings.ShowHypeTrainBegin && settings.ShowStreamerBotTwitchNotifications,
-                    NotificationType.HypeTrainEnd => settings.ShowHypeTrainEnd && settings.ShowStreamerBotTwitchNotifications,
-                    _ => true
+                    "Twitch" => notification.Type == NotificationType.Chat
+                        ? settings.ShowStreamerBotTwitchChat
+                        : settings.ShowStreamerBotTwitchNotifications && IsNotificationTypeEnabled(notification.Type, isYouTube: false, settings),
+                    "YouTube" => settings.ShowStreamerBotYouTube,
+                    "Kick" => settings.ShowStreamerBotKick,
+                    _ => false,
                 };
+            }
+
+            return IsNotificationTypeEnabled(
+                notification.Type,
+                string.Equals(platform, "YouTube", StringComparison.OrdinalIgnoreCase),
+                settings);
+        }
+
+        private static bool IsNotificationTypeEnabled(NotificationType type, bool isYouTube, AppSettings settings)
+        {
+            return type switch
+            {
+                NotificationType.Chat => !isYouTube || settings.ShowYouTubeChat,
+                NotificationType.Reward => isYouTube ? settings.ShowYouTubeSuperChat : settings.ShowReward,
+                NotificationType.Raid => settings.ShowRaid,
+                NotificationType.Follow => settings.ShowFollow,
+                NotificationType.Subscribe => isYouTube ? settings.ShowYouTubeMembership : settings.ShowSubscribe,
+                NotificationType.GiftSubscribe => settings.ShowGiftSubscribe,
+                NotificationType.Resub => settings.ShowResub,
+                NotificationType.HypeTrainBegin => settings.ShowHypeTrainBegin,
+                NotificationType.HypeTrainEnd => settings.ShowHypeTrainEnd,
+                _ => true,
+            };
         }
 
         private void ShowToast(OverlayNotification notification)

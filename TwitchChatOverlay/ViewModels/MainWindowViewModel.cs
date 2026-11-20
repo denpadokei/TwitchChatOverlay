@@ -72,10 +72,13 @@ namespace TwitchChatOverlay.ViewModels
         private Timer _tokenRefreshTimer;
         private Timer _youtubeTokenRefreshTimer;
         private Timer _obsReconnectTimer;
+        private Timer _streamerBotReconnectTimer;
         private int _isHandlingYouTubeConnectionLost;
         private int _isObsReconnectInProgress;
+        private int _isStreamerBotReconnectInProgress;
         private Timer _validateTimer;
         private bool _obsAutoReconnectEnabled;
+        private bool _streamerBotAutoReconnectEnabled;
         /// <summary>次回タイマー設定用: refresh 直後の expires_in（秒）。0 のときはデフォルト値を使用。</summary>
         private int _nextRefreshExpiresIn;
         /// <summary>前回 YouTube 接続時の waitForObsSignalBeforePolling オプション。サイレントリフレッシュ再接続に使用。</summary>
@@ -462,6 +465,12 @@ namespace TwitchChatOverlay.ViewModels
             {
                 if (this.SetProperty(ref field, value))
                 {
+                    if (!value)
+                    {
+                        this._streamerBotAutoReconnectEnabled = false;
+                        this.StopStreamerBotReconnectTimer();
+                    }
+
                     this.UpdateStreamerBotStatusMessage();
                     this.RaiseStreamerBotCommandStateChanged();
                 }
@@ -2183,40 +2192,72 @@ namespace TwitchChatOverlay.ViewModels
 
         private async void ConnectStreamerBot()
         {
-            await this.TryConnectStreamerBotAsync(statusPrefix: "Streamer.bot に接続中...");
+            this._streamerBotAutoReconnectEnabled = true;
+            await this.TryConnectStreamerBotAsync(isAutomatic: false, statusPrefix: "Streamer.bot に接続中...");
         }
 
         private void DisconnectStreamerBot()
         {
+            this._streamerBotAutoReconnectEnabled = false;
+            this.StopStreamerBotReconnectTimer();
             this._streamerBotService.Disconnect();
             this.StreamerBotStatusMessage = "Streamer.bot 接続を切断しました";
             this.RaiseStreamerBotCommandStateChanged();
         }
 
-        private async Task TryConnectStreamerBotAsync(string statusPrefix)
+        private async Task TryConnectStreamerBotAsync(bool isAutomatic, string statusPrefix)
         {
             if (!this.StreamerBotEnabled)
             {
+                this.StopStreamerBotReconnectTimer();
                 this.UpdateStreamerBotStatusMessage();
+                return;
+            }
+
+            if (Interlocked.Exchange(ref this._isStreamerBotReconnectInProgress, 1) == 1)
+            {
                 return;
             }
 
             try
             {
                 this.StreamerBotStatusMessage = statusPrefix;
-                _ = await this._streamerBotService.ConnectAsync(
+                var result = await this._streamerBotService.ConnectAsync(
                     this.StreamerBotHost,
                     this.StreamerBotPort,
                     this.StreamerBotPassword);
-                this.UpdateStreamerBotStatusMessage();
+
+                if (result.IsConnected)
+                {
+                    this.StopStreamerBotReconnectTimer();
+                    this.UpdateStreamerBotStatusMessage();
+                    return;
+                }
+
+                if (result.ShouldRetry)
+                {
+                    this._streamerBotAutoReconnectEnabled = true;
+                    this.StartStreamerBotReconnectTimer();
+                    this.StreamerBotStatusMessage = isAutomatic
+                        ? "Streamer.bot が見つからないため、10 秒ごとに再接続します。"
+                        : "Streamer.bot が見つからないため、10 秒ごとに再接続します。Streamer.bot を起動すると自動接続します。";
+                    return;
+                }
+
+                this._streamerBotAutoReconnectEnabled = false;
+                this.StopStreamerBotReconnectTimer();
+                this.StreamerBotStatusMessage = result.Message;
             }
             catch (Exception ex)
             {
                 LogService.Warning("Streamer.bot 接続失敗", ex);
+                this._streamerBotAutoReconnectEnabled = false;
+                this.StopStreamerBotReconnectTimer();
                 this.StreamerBotStatusMessage = $"Streamer.bot 接続エラー: {ex.Message}";
             }
             finally
             {
+                _ = Interlocked.Exchange(ref this._isStreamerBotReconnectInProgress, 0);
                 this.RaiseStreamerBotCommandStateChanged();
             }
         }
@@ -2229,7 +2270,34 @@ namespace TwitchChatOverlay.ViewModels
                 return;
             }
 
-            await this.TryConnectStreamerBotAsync(statusPrefix: "起動時に Streamer.bot へ接続中...");
+            this._streamerBotAutoReconnectEnabled = true;
+            await this.TryConnectStreamerBotAsync(isAutomatic: true, statusPrefix: "起動時に Streamer.bot へ接続中...");
+        }
+
+        private void StartStreamerBotReconnectTimer()
+        {
+            if (!this._streamerBotAutoReconnectEnabled || !this.StreamerBotEnabled || this._streamerBotService.IsConnected)
+            {
+                return;
+            }
+
+            if (this._streamerBotReconnectTimer != null)
+            {
+                return;
+            }
+
+            var interval = TimeSpan.FromSeconds(10);
+            this._streamerBotReconnectTimer = new Timer(
+                _ => _ = this.TryConnectStreamerBotAsync(isAutomatic: true, statusPrefix: "Streamer.bot へ再接続中..."),
+                null,
+                interval,
+                interval);
+        }
+
+        private void StopStreamerBotReconnectTimer()
+        {
+            this._streamerBotReconnectTimer?.Dispose();
+            this._streamerBotReconnectTimer = null;
         }
 
         private void UpdateStreamerBotStatusMessage()
@@ -2255,7 +2323,20 @@ namespace TwitchChatOverlay.ViewModels
         {
             _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
-                this.UpdateStreamerBotStatusMessage();
+                if (this._streamerBotService.IsConnected)
+                {
+                    this.StopStreamerBotReconnectTimer();
+                    this.UpdateStreamerBotStatusMessage();
+                }
+                else if (this._streamerBotAutoReconnectEnabled && this.StreamerBotEnabled)
+                {
+                    this.StartStreamerBotReconnectTimer();
+                }
+                else if (!this._streamerBotAutoReconnectEnabled)
+                {
+                    this.UpdateStreamerBotStatusMessage();
+                }
+
                 this.RaiseStreamerBotCommandStateChanged();
             }));
         }
@@ -2264,7 +2345,9 @@ namespace TwitchChatOverlay.ViewModels
         {
             _ = (Application.Current?.Dispatcher?.BeginInvoke(() =>
             {
-                this.StreamerBotStatusMessage = "Streamer.bot との接続が切れました";
+                this.StreamerBotStatusMessage = this._streamerBotAutoReconnectEnabled
+                    ? "Streamer.bot との接続が切れました。10 秒ごとに再接続します。"
+                    : "Streamer.bot との接続が切れました";
                 this.RaiseStreamerBotCommandStateChanged();
             }));
         }

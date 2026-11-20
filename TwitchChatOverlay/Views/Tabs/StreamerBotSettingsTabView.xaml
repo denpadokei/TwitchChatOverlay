@@ -26,12 +26,17 @@
                     Padding="12,8"
                     Margin="0,0,0,16">
                 <StackPanel>
-                    <TextBlock Text="⚠ Streamer.bot 連携を有効にすると、このアプリの Twitch/YouTube チャット通知はすべて Streamer.bot 経由で受信します。"
+                    <TextBlock Text="⚠ Streamer.bot 経由の通知は、このアプリの Twitch EventSub / YouTube 直接接続とは独立して受信します。両方を有効にすると同じイベントが二重に表示されるため、どちらか一方の通知をオフにしてください。"
                                Foreground="#CCCCCC"
                                TextWrapping="Wrap"
                                FontSize="12"
                                Margin="0,0,0,4"/>
-                    <TextBlock Text="Streamer.bot が Twitch/YouTube に接続し、WebSocket Server（デフォルト: localhost:8080）が有効になっている必要があります。"
+                    <TextBlock Text="Streamer.bot が Twitch/YouTube/Kick に接続し、WebSocket Server（デフォルト: localhost:8080）が有効になっている必要があります。"
+                               Foreground="#AAAAAA"
+                               TextWrapping="Wrap"
+                               FontSize="11"
+                               Margin="0,0,0,4"/>
+                    <TextBlock Text="WebSocket は暗号化されません（ws://）。WebSocket Server は 127.0.0.1 でのみ待ち受けることを推奨します。"
                                Foreground="#AAAAAA"
                                TextWrapping="Wrap"
                                FontSize="11"/>
@@ -149,7 +154,13 @@
             <CheckBox Content="通知（フォロー/サブスク/レイド/リワード/ハイプトレイン）"
                       IsChecked="{Binding ShowStreamerBotTwitchNotifications}"
                       Foreground="{StaticResource TextPrimaryBrush}"
-                      Margin="8,0,0,12"/>
+                      Margin="8,0,0,4"/>
+
+            <TextBlock Text="Twitch 通知は「共通」タブのイベント別 ON/OFF と併用されます。"
+                       Foreground="{StaticResource TextSecondaryBrush}"
+                       FontSize="11"
+                       TextWrapping="Wrap"
+                       Margin="8,0,0,12"/>
 
             <TextBlock Text="YouTube"
                        FontSize="12" FontWeight="Bold"

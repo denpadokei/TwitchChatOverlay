@@ -54,6 +54,10 @@
     <Content Include="icon.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TwitchChatOverlay.Tests" />
+  </ItemGroup>
+
   <!-- ビルド前にシークレットを含むC#ファイルを自動生成するターゲット -->
   <Target Name="GenerateBuildSecrets" BeforeTargets="CoreCompile">
     <PropertyGroup>
